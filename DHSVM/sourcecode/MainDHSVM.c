@@ -106,11 +106,12 @@ int main(int argc, char **argv) {
   Message("\nSTARTING INITIALIZATION PROCEDURES\n\n");
   PrintRunSettings(&Options);
 
-  /* Input files: maps, tables (with their [PARAMETERS] rows T1-T5), station
-     data */
+  /* Input files: maps, tables (with their [PARAMETERS] rows T1-T5), the maps
+     formed from the class tables, station data */
   CheckInputFiles(Input, &Options, OutputListNamesAny(&(Dump.List[OUT_POINT])));
   ReadInputMaps(Input, &Options, &Map, &Raw);
   InitTables(Time.NDaySteps, Input, &Options, &Map, &SType, &Soil, &Veg, &LType, &Time);
+  FormClassMaps(&Options, &Map, &Soil, SType, &Veg, &Raw);
   ApplyTableParameters(&Options, Time.NDaySteps, SType, Soil.NTypes, &Veg, LType, Map.NumLakes);
   ReadChannelTables(Input, &ChannelTables);
   ReadPointTable(Input, &Dump);
@@ -126,7 +127,7 @@ int main(int argc, char **argv) {
   InitSnowMap(&Map, &SnowMap, &Time);
   ApplyParameters(&Options, &Map, &Raw, TopoMap, &Soil, SType, &Veg, &SoilMap, &VegMap,
                   SnowMap, Time.Dt);
-  ValidateParameters(&Map, TopoMap, SoilMap);
+  ValidateParameters(&Options, &Map, TopoMap, SoilMap);
   PrintClassSummary(&Options, &Veg, Soil, SType, &Map, TopoMap, VegMap, SoilMap);
 
   /* Channels bound to the cells, storage adjustment */
@@ -165,6 +166,7 @@ int main(int argc, char **argv) {
 	       &InFiles, &Veg, NStats, Stat, Dump.InitStatePath, &VegMap, SnowMap,
 	       SType, SoilMap);
   InitNewDay(Time.Current.JDay, &SolarGeo);
+  InitNewDayLAI(&Map, TopoMap, &Veg, VegMap, Time.Current.JDay);
 
   /* What the outputs read */
   Model.Map = &Map;
@@ -216,6 +218,7 @@ int main(int argc, char **argv) {
 		   SType, SoilMap);
     if (IsNewDay(Time.DayStep)) {
       InitNewDay(Time.Current.JDay, &SolarGeo);
+      InitNewDayLAI(&Map, TopoMap, &Veg, VegMap, Time.Current.JDay);
       Message("%04d-%02d-%02d\n", Time.Current.Year, Time.Current.Month, Time.Current.Day);
     }
     InitNewStep(&InFiles, &Map, &Time, &Options, NStats, Stat,

@@ -11,7 +11,7 @@
    CanopyResistance()
  *****************************************************************************/
 float CanopyResistance(float LAI, float RsMin, float RsMax, float Rpc,
-  float VpdThres, float MoistThres, float WP,
+  float VpdThres, float MoistThres, float WP, float FCap,
   float TSoil, float SoilMoisture, float Vpd, float Rp)
 {
   float MoistFactor;	/* multiplier for resistance due to soil moisture feed-back */
@@ -43,8 +43,10 @@ float CanopyResistance(float LAI, float RsMin, float RsMax, float Rpc,
 
   RpFactor = 1.0 / ((RsMin / RsMax + Rp / Rpc) / (1 + Rp / Rpc));
 
-  /* equation 16, Wigmosta et al [1994] */
+  /* equation 16, Wigmosta et al [1994]; the threshold MoistThres is relative,
+     0 at the wilting point and 1 at field capacity */
 
+  MoistThres = WP + MoistThres * (FCap - WP);
   if (SoilMoisture <= WP) {
     Resistance = DHSVM_HUGE;
     return Resistance;
@@ -64,8 +66,8 @@ float CanopyResistance(float LAI, float RsMin, float RsMax, float Rpc,
   CanopyResistanceLayers()
 
   The canopy resistance associated with each soil layer Rc (s/m) and each
-  layer's share of the transpiration of vegetation layer Layer, and what the
-  scheme reports (Canopy: the canopy resistance, the net assimilation per
+  layer's share of the transpiration of vegetation layer Layer (FCap: the
+  cell's field capacity of each layer), and what the scheme reports (Canopy: the canopy resistance, the net assimilation per
   covered area, the soil moisture factor).
   JARVIS: Rc of each layer from its moisture (Wigmosta et al. 1994), the
   shares the root fractions; the reported resistance is their root-weighted
@@ -76,7 +78,7 @@ float CanopyResistance(float LAI, float RsMin, float RsMax, float Rpc,
   root fraction x layer factor.
 *****************************************************************************/
 void CanopyResistanceLayers(int Layer, PIXMET *Met, float Rp, STORYTABLE *Story,
-                            SOILTABLE *SType, float *Moist, float *SoilTemp,
+                            SOILTABLE *SType, float *FCap, float *Moist, float *SoilTemp,
                             VEGPIX *LocalVeg, CANOPYSCHEME *Canopy, float *Rc,
                             float *Share)
 {
@@ -92,21 +94,21 @@ void CanopyResistanceLayers(int Layer, PIXMET *Met, float Rp, STORYTABLE *Story,
     Sum = 0.0;
     for (i = 0; i < SType->NLayers; i++) {
       Rc[i] = CanopyResistance(Lai, Story->RsMin, Story->RsMax, Story->Rpc,
-        Story->VpdThres, Story->MoistThres, SType->WP[i], SoilTemp[i], Moist[i],
+        Story->VpdThres, Story->MoistThres, SType->WP[i], FCap[i], SoilTemp[i], Moist[i],
         Met->Vpd, Rp);
       Sum += Story->RootFract[i] / Rc[i];
     }
     Canopy->Rc = 1.0 / Sum;
     Canopy->An = 0.0;
     Canopy->Beta = PhotoMoistureStress(SType->NLayers, Story->RootFract, Moist, SType->WP,
-                                       Story->MoistThres, Share);
+                                       FCap, Story->MoistThres, Share);
     for (i = 0; i < SType->NLayers; i++)
       Share[i] = Story->RootFract[i];
     return;
   }
 
   Canopy->Beta = PhotoMoistureStress(SType->NLayers, Story->RootFract, Moist, SType->WP,
-                                     Story->MoistThres, Share);
+                                     FCap, Story->MoistThres, Share);
   PhotoStomata(Canopy->Ca, 0.001 * Met->Vpd, Canopy->Beta, Story->G1, Story->G0, &Stomata);
   Vcmax25 = Story->Vcmax25 * Canopy->Acclim;
   if (Canopy->TwoLeaf)

@@ -12,6 +12,7 @@
 #include "functions.h"
 #include "getinit.h"
 #include "constants.h"
+#include "mapio.h"
 #include "output.h"
 #include "rad.h"
 
@@ -389,16 +390,15 @@ static void InitOptions(LISTPTR Input, OPTIONSTRUCT *Options)
 
   [INPUTS]: the keys the run's options require must be present and not
   empty; the other keys are read and ignored. The files are opened and
-  checked when they are read.
+  checked when they are read. A soil or vegetation map of ClassMaps[]
+  without its key is formed from its class table (a key present must not be
+  empty).
 *****************************************************************************/
 static void InitInputKeys(LISTPTR Input, OPTIONSTRUCT *Options)
 {
   const char *Always[] = {
-    "Terrain.Elevation", "Terrain.Mask", "Soil.Class", "Soil.Depth",
-    "Soil.LateralConductivity", "Soil.ExponentialDecrease", "Soil.Porosity",
-    "Soil.FieldCapacity", "Soil.LayerThickness", "Veg.OverstoryClass", "Veg.UnderstoryClass",
-    "Veg.OverstoryCover", "Veg.OverstoryLAI", "Veg.OverstoryHeight", "Veg.UnderstoryCover",
-    "Veg.UnderstoryLAI", "Veg.UnderstoryHeight", "Soil Table", "Overstory Table",
+    "Terrain.Elevation", "Terrain.Mask", "Soil.Class", "Soil.LayerThickness",
+    "Veg.OverstoryClass", "Veg.UnderstoryClass", "Soil Table", "Overstory Table",
     "Understory Table", "Channel Class Table", "Channel Segment Table", "Channel Cell Table",
     "Station Table", "Station Data Directory"
   };
@@ -407,6 +407,13 @@ static void InitInputKeys(LISTPTR Input, OPTIONSTRUCT *Options)
 
   for (i = 0; i < (int) (sizeof(Always) / sizeof(Always[0])); i++)
     RequireConfigValue(Input, "INPUTS", Always[i], Value);
+
+  /* The soil and vegetation maps: a map, or formed from the class table */
+  for (i = 0; i < NCLASSMAPS; i++) {
+    Options->FromTable[i] = !GetConfigValue(Input, "INPUTS", ClassMaps[i].Name, Value);
+    if (!Options->FromTable[i] && IsEmptyStr(Value))
+      ReportErrorCode(103, "[INPUTS] %s is empty", ClassMaps[i].Name);
+  }
 
   if (Options->Prism)
     RequireConfigValue(Input, "INPUTS", "Met.PrecipPattern", Value);
@@ -515,6 +522,8 @@ static void InitParameters(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map)
   SOIL_POROSITY_ADJ = Parameter(Input, "Porosity Scale");
   VEG_FC_ADJ = Parameter(Input, "Overstory Cover Scale");
   VEG_LAI_ADJ = Parameter(Input, "Overstory LAI Scale");
+  VEG_UNDER_FC_ADJ = Parameter(Input, "Understory Cover Scale");
+  VEG_UNDER_LAI_ADJ = Parameter(Input, "Understory LAI Scale");
 
   /* Class and lake tables */
   SOIL_DEEPFLUX_ADJ = Parameter(Input, "Deep Flux Offset");
@@ -573,10 +582,13 @@ static void InitParameters(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map)
 /*****************************************************************************
   PrintRunSettings()
 
-  Progress messages: routing directions and the meteorology adjustments
+  Progress messages: routing directions, the meteorology adjustments, the
+  maps formed from the class tables
 *****************************************************************************/
 void PrintRunSettings(OPTIONSTRUCT *Options)
 {
+  int m;
+
   if (Options->MultiFlowDir)
     Message("Using %d neighbors with multiple flow directions for surface/subsurface routing\n", NDIRS);
   else
@@ -588,6 +600,11 @@ void PrintRunSettings(OPTIONSTRUCT *Options)
   if (Options->WindScale)
     Message("Wind speed scaled by the Met.WindScale map\n");
   Message("Stomatal scheme %s\n", (Options->StomatalScheme == MEDLYN) ? "MEDLYN" : "JARVIS");
+  for (m = 0; m < NCLASSMAPS; m++) {
+    if (Options->FromTable[m])
+      Message("%s formed from the %s (%s%s)\n", ClassMaps[m].Name, ClassMaps[m].Table,
+              ClassMaps[m].Column, (ClassMaps[m].LayerSet == MAP_SOIL) ? "_<layer>" : "");
+  }
 }
 
 /*****************************************************************************

@@ -101,7 +101,8 @@ double PhotoTwoLeafCanopy(const PHOTOKIN *K, const PHOTOSTOMATA *S, double Vcmax
 double PhotoBigLeafCanopy(const PHOTOKIN *K, const PHOTOSTOMATA *S, double Vcmax25,
                           double Lai, double VisAbs, double *An);
 float PhotoMoistureStress(int NLayers, const float *RootFract, const float *Moist,
-                          const float *WP, float Threshold, float *Share);
+                          const float *WP, const float *FCap, float Threshold,
+                          float *Share);
 void PhotoTemperatureMemory(float Tair, float Dt, float *TAcclim, float *TGrowth);
 float PhotoAcclimation(float TAcclim);
 double PhotoMolarVolume(float Tair, float Press);

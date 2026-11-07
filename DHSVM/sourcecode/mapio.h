@@ -18,6 +18,9 @@
 
 #define MAP_NAZIMUTHS 36		/* Azimuths of a horizon angle map */
 
+/* The soil and vegetation maps a class table can give (CM_* order) */
+extern const CLASSMAP ClassMaps[NCLASSMAPS];
+
 void CheckMap(MAPFILE *File, const char *Path, const char *Name, int NumberType,
               const char *Units, int NLayers, char (*LayerNames)[MAP_NAMESIZE],
               const char *Time, MAPSIZE *Map, int Code);

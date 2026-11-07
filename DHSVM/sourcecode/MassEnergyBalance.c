@@ -309,7 +309,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       Rp, &(Over->Story), SType, LocalVeg->MoistureFlux, LocalSoil->Moist, LocalSoil->Temp,
       &(LocalPrecip->IntRain[0]), LocalEvap->EPot, LocalEvap->EInt, LocalEvap->ESoil,
       LocalEvap->EAct, &(LocalEvap->ETot), LocalNetwork->Adjust, LocalSoil->LayerThickness,
-      UpperRa, LocalVeg, &Canopy);
+      LocalSoil->FCap, UpperRa, LocalVeg, &Canopy);
     LocalVeg->MoistureFlux += LocalEvap->EAct[0] + LocalEvap->EInt[0];
     LocalEvap->Rc[0] = Canopy.Rc;
     LocalEvap->An[0] = Canopy.An;
@@ -360,7 +360,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       LocalSoil->Moist, LocalSoil->Temp,
       &(LocalPrecip->IntRain[Lower]), LocalEvap->EPot, LocalEvap->EInt, LocalEvap->ESoil,
       LocalEvap->EAct, &(LocalEvap->ETot), LocalNetwork->Adjust, LocalSoil->LayerThickness,
-      LowerRa, LocalVeg, &Canopy);
+      LocalSoil->FCap, LowerRa, LocalVeg, &Canopy);
     LocalVeg->MoistureFlux += LocalEvap->EAct[Lower] + LocalEvap->EInt[Lower];
     LocalEvap->Rc[Lower] = Canopy.Rc;
     LocalEvap->An[Lower] = Canopy.An;
@@ -391,9 +391,10 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   else
     LocalEvap->EvapSoil = 0.0;
 
-  /* Calculate soil evaporation from the upper soil layer of the whole cell
-     (under and outside the understory) if no snow is present: the ground's
-     net radiation, the demand above it (and the ponding evaporation) */
+  /* Calculate soil evaporation from the upper soil layer of the cell outside
+     its understory class's litter cover (under and outside the understory)
+     if no snow is present: the ground's net radiation, the demand above it
+     (and the ponding evaporation) */
   if (LocalSnow->HasSnow != TRUE) {
     if (LocalVeg->UnderStory == TRUE)
       LocalRad->NetRadiation[Lower] += NetRadGround;
@@ -407,9 +408,10 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
                       LocalMet->Lv, LocalMet->AirDens, LocalMet->Vpd, NetRadGround, LowerRa,
                       (LocalVeg->MoistureFlux + LocalEvap->EvapSoil),
                       LocalSoil->Porosity[0], LocalSoil->FCap[0], LocalSoil->KsVert[0],
-                      SType->Press[0], SType->PoreDist[0], SType->WP[0],
+                      LocalSoil->Press[0], LocalSoil->PoreDist[0], SType->WP[0],
                       LocalSoil->LayerThickness[0],
-                      &(LocalSoil->Moist[0]), LocalNetwork->Adjust[0], &SoilEPot,
+                      &(LocalSoil->Moist[0]), LocalNetwork->Adjust[0],
+                      (Under != NULL) ? 1. - Under->LitterCover : 1., &SoilEPot,
                       &(LocalSoil->DesorptionAcc));
     LocalEvap->EvapSoil += SoilEvap;
     LocalEvap->EAct[NVeg] = SoilEvap;
@@ -439,7 +441,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
                                LocalMet->Lv, LocalMet->AirDens, LocalMet->Vpd, NetRadiation, LowerRa,
                                LocalVeg->MoistureFlux,
                                LocalSoil->Porosity, LocalSoil->FCap, LocalSoil->KsVert,
-                               SType->Press, SType->PoreDist,
+                               LocalSoil->Press, LocalSoil->PoreDist,
                                ((SType->NLayers == LocalNetwork->CutBankZone) ?
                                   LocalSoil->Depth - LocalSoil->TotalThickness :
                                   LocalSoil->LayerThickness[LocalNetwork->CutBankZone]),
@@ -544,7 +546,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   UnsaturatedFlow(Options, Dt, DX, DY, Infiltration,
     SType->NLayers, LocalSoil->Depth,
     LocalNetwork->Area, LocalSoil->LayerThickness, LocalSoil->KsVert, SType->KsAnisotropy,
-    SType->PoreDist, LocalSoil->Porosity, LocalSoil->FCap, LocalSoil->Perc,
+    LocalSoil->PoreDist, LocalSoil->Porosity, LocalSoil->FCap, LocalSoil->Perc,
     LocalNetwork->PercArea, LocalNetwork->Adjust, LocalNetwork->CutBankZone,
     LocalNetwork->BankHeight, &(LocalSoil->TableDepth), &(LocalSoil->IExcess),
     LocalSoil->Moist, InfiltOption,

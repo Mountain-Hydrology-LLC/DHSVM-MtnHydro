@@ -55,6 +55,8 @@ extern float SOIL_POROSITY_ADJ; /* Porosity Scale */
 extern float SOIL_FIELDCAP_ADJ; /* Field Capacity Scale */
 extern float VEG_LAI_ADJ; /* Overstory LAI Scale */
 extern float VEG_FC_ADJ; /* Overstory Cover Scale */
+extern float VEG_UNDER_LAI_ADJ; /* Understory LAI Scale */
+extern float VEG_UNDER_FC_ADJ; /* Understory Cover Scale */
 extern float SOIL_DEEPFLUX_ADJ; /* Deep Flux Offset (m/yr), added to the deep flux of every soil class */
 extern float VEG_RSMIN_ADJ; /* Min Stomatal Resistance Scale (JARVIS) */
 extern float VEG_MOIST_ADJ; /* Moisture Threshold Scale */

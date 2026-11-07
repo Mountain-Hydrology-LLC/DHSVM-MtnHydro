@@ -5,7 +5,9 @@
  *               (Veg.OverstoryClass, Veg.UnderstoryClass, Veg.OverstoryCover,
  *               Veg.OverstoryLAI, Veg.OverstoryHeight, Veg.UnderstoryCover,
  *               Veg.UnderstoryLAI, Veg.UnderstoryHeight), before the time
- *               step starting then. The latest update before Start gives
+ *               step starting then; a map without an [INPUTS] key is formed
+ *               from its class table through the update's class map, and
+ *               has no file. The latest update before Start gives
  *               the vegetation at Start. The water of a canopy the cell
  *               loses, and the detention storage of a cell without
  *               impervious fraction, becomes surface water of the cell.
@@ -92,36 +94,60 @@ static void ReadUpdateMap(VEGUPDATES *U, int k, const char *Name, int NumberType
 /*****************************************************************************
   ReadVegUpdate()
 
-  Reads and checks the eight maps of update k (the checks of the input
-  vegetation maps)
+  Reads and checks the maps of update k: the two class maps and the maps
+  whose [INPUTS] keys are given; the others are formed from the class tables
+  through the update's class maps (the checks of the input vegetation maps)
 *****************************************************************************/
-static void ReadVegUpdate(VEGUPDATES *U, int k, MAPSIZE *Map, unsigned char *Mask,
-                          VEGTABLES *Veg, VEGMAPS *V)
+static void ReadVegUpdate(OPTIONSTRUCT *Options, VEGUPDATES *U, int k, MAPSIZE *Map,
+                          unsigned char *Mask, VEGTABLES *Veg, VEGMAPS *V)
 {
   size_t NCells = (size_t) Map->NY * Map->NX;
   char Suffix[NAMESIZE + 2];
+  float **Values;
+  int m;
 
+  memset(V, 0, sizeof(VEGMAPS));
   if (!(V->OverstoryClass = (unsigned char *) calloc(NCells, sizeof(unsigned char))) ||
-      !(V->UnderstoryClass = (unsigned char *) calloc(NCells, sizeof(unsigned char))) ||
-      !(V->OverstoryCover = (float *) calloc(NCells, sizeof(float))) ||
-      !(V->OverstoryLAI = (float *) calloc(NCells, sizeof(float))) ||
-      !(V->OverstoryHeight = (float *) calloc(NCells, sizeof(float))) ||
-      !(V->UnderstoryCover = (float *) calloc(NCells, sizeof(float))) ||
-      !(V->UnderstoryLAI = (float *) calloc(NCells, sizeof(float))) ||
-      !(V->UnderstoryHeight = (float *) calloc(NCells, sizeof(float))))
+      !(V->UnderstoryClass = (unsigned char *) calloc(NCells, sizeof(unsigned char))))
     ReportError("ReadVegUpdate", 1);
   ReadUpdateMap(U, k, "Veg.OverstoryClass", NC_BYTE, "-", Map, V->OverstoryClass);
   ReadUpdateMap(U, k, "Veg.UnderstoryClass", NC_BYTE, "-", Map, V->UnderstoryClass);
-  ReadUpdateMap(U, k, "Veg.OverstoryCover", NC_FLOAT, "fraction", Map, V->OverstoryCover);
-  ReadUpdateMap(U, k, "Veg.OverstoryLAI", NC_FLOAT, "m2/m2", Map, V->OverstoryLAI);
-  ReadUpdateMap(U, k, "Veg.OverstoryHeight", NC_FLOAT, "m", Map, V->OverstoryHeight);
-  ReadUpdateMap(U, k, "Veg.UnderstoryCover", NC_FLOAT, "fraction", Map, V->UnderstoryCover);
-  ReadUpdateMap(U, k, "Veg.UnderstoryLAI", NC_FLOAT, "m2/m2", Map, V->UnderstoryLAI);
-  ReadUpdateMap(U, k, "Veg.UnderstoryHeight", NC_FLOAT, "m", Map, V->UnderstoryHeight);
+  for (m = CM_OVERCOVER; m <= CM_UNDERHEIGHT; m++) {
+    if (Options->FromTable[m])
+      continue;
+    Values = VegMapValues(V, m);
+    if (!(*Values = (float *) calloc(NCells, sizeof(float))))
+      ReportError("ReadVegUpdate", 1);
+    ReadUpdateMap(U, k, ClassMaps[m].Name, NC_FLOAT, ClassMaps[m].Units, Map, *Values);
+  }
+  FormVegMaps(Options, Map, Veg, V);
 
   Suffix[0] = '.';
   SPrintIsoStamp(&(U->Time[k]), Suffix + 1);
-  ValidateVegMaps(Map, Mask, V, Veg, Suffix);
+  ValidateVegMaps(Options, Map, Mask, V, Veg, Suffix);
+}
+
+/*****************************************************************************
+  VegMapValues()
+
+  The array of map m of ClassMaps[] (CM_OVERCOVER..CM_UNDERHEIGHT) in V
+*****************************************************************************/
+float **VegMapValues(VEGMAPS *V, int m)
+{
+  switch (m) {
+  case CM_OVERCOVER:
+    return &(V->OverstoryCover);
+  case CM_OVERLAI:
+    return &(V->OverstoryLAI);
+  case CM_OVERHEIGHT:
+    return &(V->OverstoryHeight);
+  case CM_UNDERCOVER:
+    return &(V->UnderstoryCover);
+  case CM_UNDERLAI:
+    return &(V->UnderstoryLAI);
+  default:
+    return &(V->UnderstoryHeight);
+  }
 }
 
 /*****************************************************************************
@@ -183,7 +209,7 @@ void InitVegUpdates(OPTIONSTRUCT *Options, MAPSIZE *Map, TIMESTRUCT *Time, INPUT
 
   /* The vegetation maps as given are checked even when an update replaces
      them */
-  ValidateVegMaps(Map, Raw->Mask, &(Raw->Veg), Veg, "");
+  ValidateVegMaps(Options, Map, Raw->Mask, &(Raw->Veg), Veg, "");
 
   U->Next = U->N;
   for (k = 0; k < U->N && U->Step[k] < Time->NSteps; k++) {
@@ -191,13 +217,13 @@ void InitVegUpdates(OPTIONSTRUCT *Options, MAPSIZE *Map, TIMESTRUCT *Time, INPUT
       Latest = k;
     else if (U->Next == U->N)
       U->Next = k;
-    ReadVegUpdate(U, k, Map, Raw->Mask, Veg, &V);
+    ReadVegUpdate(Options, U, k, Map, Raw->Mask, Veg, &V);
     MarkClasses(&V, Map, Raw->Mask, Dump);
     FreeVegMaps(&V);
   }
 
   if (Latest >= 0) {
-    ReadVegUpdate(U, Latest, Map, Raw->Mask, Veg, &V);
+    ReadVegUpdate(Options, U, Latest, Map, Raw->Mask, Veg, &V);
     FreeVegMaps(&(Raw->Veg));
     Raw->Veg = V;
     SPrintIsoStamp(&(U->Time[Latest]), Stamp);
@@ -238,7 +264,7 @@ void ApplyVegUpdate(OPTIONSTRUCT *Options, TIMESTRUCT *Time, MAPSIZE *Map, TOPOP
   for (y = 0, i = 0; y < Map->NY; y++)
     for (x = 0; x < Map->NX; x++, i++)
       Mask[i] = INBASIN(TopoMap[y][x].Mask) ? 1 : 0;
-  ReadVegUpdate(U, U->Next, Map, Mask, Veg, &V);
+  ReadVegUpdate(Options, U, U->Next, Map, Mask, Veg, &V);
 
   for (y = 0, i = 0; y < Map->NY; y++) {
     for (x = 0; x < Map->NX; x++, i++) {
@@ -257,7 +283,7 @@ void ApplyVegUpdate(OPTIONSTRUCT *Options, TIMESTRUCT *Time, MAPSIZE *Map, TOPOP
 
       /* The cell's new vegetation */
       SetCellVegetation(Options, Veg, Cell, &V, i, y, x);
-      SetCellMonth(Options, Veg, Cell, Time->Current.Month);
+      SetCellLAI(Veg, Cell, Time->Current.JDay);
 
       /* The water of a canopy the cell lost becomes surface water; the
          water of the others moves to their new positions */

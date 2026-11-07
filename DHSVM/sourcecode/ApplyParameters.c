@@ -13,7 +13,8 @@
  *                   lake (Lake Dynamics)
  *                 T5 PowLawExponent = lake table OutflowExponent x scale,
  *                   every lake (Lake Dynamics)
- *                 T6 MoistThres = MoistureThreshold x scale, every row of
+ *                 T6 MoistThres = MoistureThreshold x scale (relative: 0 at
+ *                   the wilting point, 1 at field capacity), every row of
  *                   the overstory and the understory table
  *                 T7 G1 = StomatalSlope x scale, every row of the overstory
  *                   and the understory table (MEDLYN)
@@ -25,11 +26,12 @@
  *                   rate and the deep flux of each cell
  *                 4 FCap[l] = max(Soil.FieldCapacity[l] x scale, WP[l] + 0.01)
  *                 5 Porosity[l] = max(Soil.Porosity[l] x scale, FCap[l] + 0.01)
- *                 6 overstory cover = min(Veg.OverstoryCover x scale, 1)
+ *                 6 overstory cover = min(Veg.OverstoryCover x scale, 1),
+ *                   understory cover = min(Veg.UnderstoryCover x scale, 1)
  *                 7 overstory LAI of a month = Veg.OverstoryLAI x the
- *                   overstory class fraction of the month x scale (the
+ *                   overstory class fraction of the month x scale,
  *                   understory LAI of a month = Veg.UnderstoryLAI x the
- *                   understory class fraction of the month)
+ *                   understory class fraction of the month x scale
  *                 8-15 the snow parameters of every cell, with the forest
  *                   offset of the albedo decay rates
  *               and the melt scale of every cell from Snow.MeltScale (1
@@ -38,6 +40,7 @@
  *               were checked before (Validate.c), so the bounds of rows 1,
  *               4, 5 and 6 act only through the parameters.
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +50,9 @@
 #include "DHSVMerror.h"
 #include "functions.h"
 #include "constants.h"
+
+#define FCAP_SUCTION 3.3   /* Suction at field capacity (m) */
+#define WP_SUCTION 150.0   /* Suction at the wilting point (m) */
 
 static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *Raw,
   TOPOPIX **TopoMap, LAYER *Soil, SOILTABLE *SType, SOILPIX ***SoilMap, int Dt);
@@ -171,6 +177,8 @@ static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *
       if (!(Cell->KsVert = (float *)calloc(NLayers + 1, sizeof(float))) ||
           !(Cell->FCap = (float *)calloc(NLayers + 1, sizeof(float))) ||
           !(Cell->Porosity = (float *)calloc(NLayers + 1, sizeof(float))) ||
+          !(Cell->PoreDist = (float *)calloc(NLayers + 1, sizeof(float))) ||
+          !(Cell->Press = (float *)calloc(NLayers + 1, sizeof(float))) ||
           !(Cell->Moist = (float *)calloc(NLayers + 1, sizeof(float))) ||
           !(Cell->Perc = (float *)calloc(NLayers, sizeof(float))) ||
           !(Cell->InterFlow = (float *)calloc(NLayers + 1, sizeof(float))) ||
@@ -229,9 +237,10 @@ static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *
       /* Vertical conductivity of the deep layer */
       NSet = NLayers;
       if (Options->UseKsatAnisotropy) {
-        /* Calculate effective lateral conductivity of current soil layer */
+        /* Transmissivity of the deep layer, from the bottom of the root zone
+           to the soil depth */
         Transmissivity =
-          CalcTransmissivity(Cell->Depth, Cell->Depth - Cell->TotalThickness,
+          CalcTransmissivity(Cell->Depth, Cell->TotalThickness,
                              Cell->KsLat, Cell->KsLatExp, SType[sidx].DepthThresh);
         KsVertCalc = Transmissivity / (Cell->Depth - Cell->TotalThickness);
 
@@ -275,6 +284,14 @@ static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *
         if (Cell->Porosity[NSet] < (Cell->FCap[NSet] + 0.01))
           Cell->Porosity[NSet] = Cell->FCap[NSet] + 0.01;
       }
+
+      /* Brooks-Corey curve theta / Porosity = (Press / suction)^PoreDist
+         through the field capacity at FCAP_SUCTION and the wilting point at
+         WP_SUCTION */
+      for (NSet = 0; NSet <= NLayers; NSet++) {
+        Cell->PoreDist[NSet] = log(Cell->FCap[NSet] / SType[sidx].WP[NSet]) / log(WP_SUCTION / FCAP_SUCTION);
+        Cell->Press[NSet] = FCAP_SUCTION * pow(Cell->FCap[NSet] / Cell->Porosity[NSet], 1.0 / Cell->PoreDist[NSet]);
+      }
     }
   }
 
@@ -294,9 +311,8 @@ static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *
   ApplyVegParameters()
 
   Rows 6 and 7 on every mask cell from the eight vegetation maps: the
-  classes, the overstory cover and LAI, the understory cover (lowered later
-  on channel cells) and LAI, the heights and the wind profile and
-  aerodynamic resistances
+  classes, the overstory and understory cover and LAI, the heights and the
+  wind profile and aerodynamic resistances
 *****************************************************************************/
 static void ApplyVegParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *Raw,
   TOPOPIX **TopoMap, VEGTABLES *Veg, VEGPIX ***VegMap)
@@ -305,7 +321,6 @@ static void ApplyVegParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *R
   int i;			/* counter */
   int x;			/* counter */
   int y;			/* counter */
-  int j;			/* counter */
   VEGPIX *Cell;
   VEGMAPS *V = &(Raw->Veg);
 
@@ -328,15 +343,11 @@ static void ApplyVegParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *R
       /* Room for both canopies, whatever the classes (vegetation updates
          change them) */
       if (!(Cell->Fract = (float *)calloc(MAXVEGLAYERS, sizeof(float))) ||
-          !(Cell->LAIMonthly = (float **)calloc(MAXVEGLAYERS, sizeof(float *))) ||
+          !(Cell->LAIFull = (float *)calloc(MAXVEGLAYERS, sizeof(float))) ||
           !(Cell->LAI = (float *)calloc(MAXVEGLAYERS, sizeof(float))) ||
           !(Cell->MaxInt = (float *)calloc(MAXVEGLAYERS, sizeof(float))) ||
           !(Cell->Height = (float *)calloc(MAXVEGLAYERS, sizeof(float))))
         ReportError((char *)Routine, 1);
-      for (j = 0; j < MAXVEGLAYERS; j++) {
-        if (!(Cell->LAIMonthly[j] = (float *)calloc(12, sizeof(float))))
-          ReportError((char *)Routine, 1);
-      }
 
       SetCellVegetation(Options, Veg, Cell, V, i, y, x);
     }
@@ -350,7 +361,7 @@ static void ApplyVegParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *R
 
   Rows 6 and 7 on one mask cell from the values of cell i of the vegetation
   maps V: the overstory and understory classes and the layers present, the
-  cover of each layer, the LAI of every month, the
+  cover of each layer, the full-leaf LAI of each layer, the
   heights, the wind profile and aerodynamic resistances (layers in position
   order, overstory first)
 *****************************************************************************/
@@ -358,22 +369,20 @@ void SetCellVegetation(OPTIONSTRUCT *Options, VEGTABLES *Veg, VEGPIX *Cell, VEGM
                        size_t i, int y, int x)
 {
   OVERTABLE *Over;
-  UNDERTABLE *Under;
   int Lower;			/* Position of the understory layer */
-  int NSet;
 
   /* Classes and the layers present: an understory class with cover 0 has
-     no understory layer */
+     no understory layer (the cover before its scale) */
   Cell->OverClass = V->OverstoryClass[i];
   Cell->UnderClass = V->UnderstoryClass[i];
   Cell->OverStory = (Cell->OverClass > 0) ? TRUE : FALSE;
   Cell->UnderStory = (Cell->UnderClass > 0 && V->UnderstoryCover[i] > 0.0) ? TRUE : FALSE;
   Cell->NVegLayers = Cell->OverStory + Cell->UnderStory;
   Over = OverstoryRow(Veg, Cell);
-  Under = UnderstoryRow(Veg, Cell);
   Lower = CanopyIndex(Cell, 1);
 
-  /* 6 Overstory Cover Scale: at most 1; the understory cover from its map */
+  /* 6 Overstory and Understory Cover Scale: each cover times its scale, at
+     most 1 */
   if (Cell->OverStory == TRUE) {
     Cell->Fract[0] = V->OverstoryCover[i];
     Cell->Fract[0] *= VEG_FC_ADJ;
@@ -384,19 +393,21 @@ void SetCellVegetation(OPTIONSTRUCT *Options, VEGTABLES *Veg, VEGPIX *Cell, VEGM
   Cell->UnderstoryCover = 0.0;
   if (Cell->UnderStory == TRUE) {
     Cell->UnderstoryCover = V->UnderstoryCover[i];
-    Cell->Fract[Lower] = V->UnderstoryCover[i];
+    Cell->UnderstoryCover *= VEG_UNDER_FC_ADJ;
+    if (Cell->UnderstoryCover > 1.0)
+      Cell->UnderstoryCover = 1.0;
+    Cell->Fract[Lower] = Cell->UnderstoryCover;
   }
 
-  /* 7 Overstory LAI Scale, January to December: the overstory LAI map times
-     the overstory class fraction of the month, times the scale; the
-     understory LAI map times the understory class fraction of the month */
-  for (NSet = 0; NSet < 12; NSet++) {
-    if (Cell->OverStory == TRUE) {
-      Cell->LAIMonthly[0][NSet] = V->OverstoryLAI[i] * Over->Story.LAIFraction[NSet];
-      Cell->LAIMonthly[0][NSet] *= VEG_LAI_ADJ;
-    }
-    if (Cell->UnderStory == TRUE)
-      Cell->LAIMonthly[Lower][NSet] = V->UnderstoryLAI[i] * Under->Story.LAIFraction[NSet];
+  /* 7 Overstory and Understory LAI Scale: each LAI map times its scale, the
+     full-leaf LAI (SetCellLAI forms the LAI of the day) */
+  if (Cell->OverStory == TRUE) {
+    Cell->LAIFull[0] = V->OverstoryLAI[i];
+    Cell->LAIFull[0] *= VEG_LAI_ADJ;
+  }
+  if (Cell->UnderStory == TRUE) {
+    Cell->LAIFull[Lower] = V->UnderstoryLAI[i];
+    Cell->LAIFull[Lower] *= VEG_UNDER_LAI_ADJ;
   }
 
   /* Vegetation heights of the cell from the overstory and understory height

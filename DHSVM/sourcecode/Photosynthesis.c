@@ -287,25 +287,29 @@ double PhotoBigLeafCanopy(const PHOTOKIN *K, const PHOTOSTOMATA *S, double Vcmax
   Soil moisture factor of a canopy (CABLE): per layer 0 at or below the
   wilting point, otherwise 1 at or above the threshold and linear between
   (tested in this order, as the Jarvis moisture factor, so a threshold at or
-  below the wilting point gives a step at the wilting point); their sum
+  below the wilting point gives a step at the wilting point). Threshold is
+  relative: the layer's threshold is WP + Threshold x (FCap - WP); their sum
   weighted by the root fractions, at least 1e-4. Share: each layer's part of
   the transpiration, root fraction x layer factor over their sum (the root
   fractions where the sum is 0)
 *****************************************************************************/
 float PhotoMoistureStress(int NLayers, const float *RootFract, const float *Moist,
-                          const float *WP, float Threshold, float *Share)
+                          const float *WP, const float *FCap, float Threshold,
+                          float *Share)
 {
   float Sum = 0.0;
   float Layer;
+  float Thres;
   int i;
 
   for (i = 0; i < NLayers; i++) {
+    Thres = WP[i] + Threshold * (FCap[i] - WP[i]);
     if (Moist[i] <= WP[i])
       Layer = 0.0;
-    else if (Moist[i] >= Threshold)
+    else if (Moist[i] >= Thres)
       Layer = 1.0;
     else
-      Layer = (Moist[i] - WP[i]) / (Threshold - WP[i]);
+      Layer = (Moist[i] - WP[i]) / (Thres - WP[i]);
     Share[i] = RootFract[i] * Layer;
     Sum += Share[i];
   }

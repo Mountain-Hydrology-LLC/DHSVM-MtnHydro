@@ -74,6 +74,26 @@ static void SoilLayerName(char *Buffer, size_t Size, const char *Name, int Layer
     snprintf(Buffer, Size, "%s.Deep", Name);
 }
 
+/* Name of map m of ClassMaps[] (soil layer Layer) in messages:
+   <Name>[.<layer>]<Suffix>, followed by " (<table key> <column>[_<layer>])"
+   when the map is formed from its class table */
+static void ClassMapName(char *Buffer, size_t Size, OPTIONSTRUCT *Options, int m, int Layer,
+                         int SoilLayers, const char *Suffix)
+{
+  const CLASSMAP *C = &(ClassMaps[m]);
+  char Token[NAMESIZE + 2] = "";
+
+  if (C->LayerSet == MAP_SOIL && Layer < SoilLayers)
+    snprintf(Token, sizeof(Token), "%d", Layer + 1);
+  else if (C->LayerSet == MAP_SOIL)
+    strcpy(Token, "Deep");
+  if (!Options->FromTable[m])
+    snprintf(Buffer, Size, "%s%s%s%s", C->Name, (Token[0] != '\0') ? "." : "", Token, Suffix);
+  else
+    snprintf(Buffer, Size, "%s%s%s%s (%s %s%s%s)", C->Name, (Token[0] != '\0') ? "." : "",
+             Token, Suffix, C->Table, C->Column, (Token[0] != '\0') ? "_" : "", Token);
+}
+
 /*****************************************************************************
   CheckInputFiles()
 
@@ -85,20 +105,21 @@ static void SoilLayerName(char *Buffer, size_t Size, const char *Name, int Layer
 void CheckInputFiles(LISTPTR Input, OPTIONSTRUCT *Options, int PointTable)
 {
   const char *Always[] = {
-    "Terrain.Elevation", "Terrain.Mask", "Soil.Class", "Soil.Depth",
-    "Soil.LateralConductivity", "Soil.ExponentialDecrease", "Soil.Porosity",
-    "Soil.FieldCapacity", "Soil.LayerThickness", "Veg.OverstoryClass", "Veg.UnderstoryClass",
-    "Veg.OverstoryCover", "Veg.OverstoryLAI", "Veg.OverstoryHeight", "Veg.UnderstoryCover",
-    "Veg.UnderstoryLAI", "Veg.UnderstoryHeight", "Soil Table", "Overstory Table",
+    "Terrain.Elevation", "Terrain.Mask", "Soil.Class", "Soil.LayerThickness",
+    "Veg.OverstoryClass", "Veg.UnderstoryClass", "Soil Table", "Overstory Table",
     "Understory Table", "Channel Class Table", "Channel Segment Table", "Channel Cell Table",
     "Station Table"
   };
-  const char *Used[12];
+  const char *Used[NCLASSMAPS + 12];
   char Path[BUFSIZE + 1];
   FILE *File;
   int n = 0;
   int i;
 
+  for (i = 0; i < NCLASSMAPS; i++) {
+    if (!Options->FromTable[i])
+      Used[n++] = ClassMaps[i].Name;
+  }
   if (Options->Shading) {
     Used[n++] = "Terrain.HorizonAngle";
     Used[n++] = "Terrain.SkyView";
@@ -142,16 +163,17 @@ void CheckInputFiles(LISTPTR Input, OPTIONSTRUCT *Options, int PointTable)
 /*****************************************************************************
   ValidateVegMaps()
 
-  The eight vegetation maps as given (the input maps or one vegetation
-  update): the classes of every mask cell rows of their tables or 0; on
-  overstory cells (overstory class > 0) no no-data in the overstory maps,
-  the overstory cover in (0, 1], the overstory LAI and height positive; on
-  cells with an understory class no no-data in the understory cover, which
-  is in [0, 1]; where that cover is positive no no-data in the understory
-  LAI and height, both positive. Suffix follows the map names in messages
+  The eight vegetation maps as given or formed from the class tables (the
+  input maps or one vegetation update): the classes of every mask cell rows
+  of their tables or 0; on overstory cells (overstory class > 0) no no-data
+  in the overstory maps, the overstory cover in (0, 1], the overstory LAI
+  and height positive; on cells with an understory class no no-data in the
+  understory cover, which is in [0, 1]; where that cover is positive no
+  no-data in the understory LAI and height, both positive. Suffix follows
+  the map names in messages
 *****************************************************************************/
-void ValidateVegMaps(MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V, VEGTABLES *Veg,
-  const char *Suffix)
+void ValidateVegMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V,
+  VEGTABLES *Veg, const char *Suffix)
 {
   int x, y, i;
   char Name[BUFSIZE + 1];
@@ -162,57 +184,62 @@ void ValidateVegMaps(MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V, VEGTABLES *V
 #define VOVER(i) (V->OverstoryClass[i] > 0)
 #define VUNDER(i) (V->UnderstoryClass[i] > 0)
 #define VCOVERED(i) (V->UnderstoryClass[i] > 0 && V->UnderstoryCover[i] > 0.0)
-#define VCHECK(Array, Where, MapName, Condition, Text, ValueName)    \
+#define VFAIL(Array, Where, Condition)                              \
   memset(&F, 0, sizeof(F));                                         \
   for (y = 0, i = 0; y < Map->NY; y++)                              \
     for (x = 0; x < Map->NX; x++, i++)                              \
       if (VMASK(i) && (Where) && (Condition))                       \
-        Fail(&F, y, x, (Array)[i], 0);                              \
+        Fail(&F, y, x, (Array)[i], 0);
+#define CLASSCHECK(Array, MapName, Condition, Text)                 \
+  VFAIL(Array, TRUE, Condition)                                     \
   snprintf(What, sizeof(What), "%s%s", MapName, Suffix);            \
+  ReportCells(&F, What, Text, MapName, NULL);
+#define VCHECK(Array, Where, m, Condition, Text, ValueName)          \
+  VFAIL(Array, Where, Condition)                                    \
+  ClassMapName(What, sizeof(What), Options, m, 0, 0, Suffix);       \
   ReportCells(&F, What, Text, ValueName, NULL);
 
   /* Classes: no no-data, rows of their tables or 0 */
-  VCHECK(V->OverstoryClass, TRUE, "Veg.OverstoryClass",
-         V->OverstoryClass[i] == MAP_NODATA_BYTE, "no-data", "Veg.OverstoryClass");
+  CLASSCHECK(V->OverstoryClass, "Veg.OverstoryClass", V->OverstoryClass[i] == MAP_NODATA_BYTE,
+             "no-data");
   snprintf(Name, sizeof(Name), "class not in 0..%d (the overstory table rows)", Veg->NOver);
-  VCHECK(V->OverstoryClass, TRUE, "Veg.OverstoryClass", V->OverstoryClass[i] > Veg->NOver,
-         Name, "Veg.OverstoryClass");
-  VCHECK(V->UnderstoryClass, TRUE, "Veg.UnderstoryClass",
-         V->UnderstoryClass[i] == MAP_NODATA_BYTE, "no-data", "Veg.UnderstoryClass");
+  CLASSCHECK(V->OverstoryClass, "Veg.OverstoryClass", V->OverstoryClass[i] > Veg->NOver, Name);
+  CLASSCHECK(V->UnderstoryClass, "Veg.UnderstoryClass",
+             V->UnderstoryClass[i] == MAP_NODATA_BYTE, "no-data");
   snprintf(Name, sizeof(Name), "class not in 0..%d (the understory table rows)", Veg->NUnder);
-  VCHECK(V->UnderstoryClass, TRUE, "Veg.UnderstoryClass", V->UnderstoryClass[i] > Veg->NUnder,
-         Name, "Veg.UnderstoryClass");
+  CLASSCHECK(V->UnderstoryClass, "Veg.UnderstoryClass", V->UnderstoryClass[i] > Veg->NUnder,
+             Name);
 
   /* No no-data where a value is used */
-  VCHECK(V->OverstoryCover, VOVER(i), "Veg.OverstoryCover",
+  VCHECK(V->OverstoryCover, VOVER(i), CM_OVERCOVER,
          V->OverstoryCover[i] == MAP_NODATA_FLOAT, "no-data", "Veg.OverstoryCover");
-  VCHECK(V->OverstoryLAI, VOVER(i), "Veg.OverstoryLAI",
+  VCHECK(V->OverstoryLAI, VOVER(i), CM_OVERLAI,
          V->OverstoryLAI[i] == MAP_NODATA_FLOAT, "no-data", "Veg.OverstoryLAI");
-  VCHECK(V->OverstoryHeight, VOVER(i), "Veg.OverstoryHeight",
+  VCHECK(V->OverstoryHeight, VOVER(i), CM_OVERHEIGHT,
          V->OverstoryHeight[i] == MAP_NODATA_FLOAT, "no-data", "Veg.OverstoryHeight");
-  VCHECK(V->UnderstoryCover, VUNDER(i), "Veg.UnderstoryCover",
+  VCHECK(V->UnderstoryCover, VUNDER(i), CM_UNDERCOVER,
          V->UnderstoryCover[i] == MAP_NODATA_FLOAT, "no-data", "Veg.UnderstoryCover");
-  VCHECK(V->UnderstoryLAI, VCOVERED(i), "Veg.UnderstoryLAI",
+  VCHECK(V->UnderstoryLAI, VCOVERED(i), CM_UNDERLAI,
          V->UnderstoryLAI[i] == MAP_NODATA_FLOAT, "no-data", "Veg.UnderstoryLAI");
-  VCHECK(V->UnderstoryHeight, VCOVERED(i), "Veg.UnderstoryHeight",
+  VCHECK(V->UnderstoryHeight, VCOVERED(i), CM_UNDERHEIGHT,
          V->UnderstoryHeight[i] == MAP_NODATA_FLOAT, "no-data", "Veg.UnderstoryHeight");
 
   /* Overstory cover in (0, 1], overstory LAI and height positive; the
      understory cover in [0, 1], the understory LAI and height positive
      where it covers */
-  VCHECK(V->OverstoryCover, VOVER(i), "Veg.OverstoryCover",
+  VCHECK(V->OverstoryCover, VOVER(i), CM_OVERCOVER,
          !(V->OverstoryCover[i] > 0.0 && V->OverstoryCover[i] <= 1.0),
          "cover not in (0, 1] on overstory cells", "cover");
-  VCHECK(V->OverstoryLAI, VOVER(i), "Veg.OverstoryLAI", !(V->OverstoryLAI[i] > 0.0),
+  VCHECK(V->OverstoryLAI, VOVER(i), CM_OVERLAI, !(V->OverstoryLAI[i] > 0.0),
          "LAI <= 0 on overstory cells", "LAI");
-  VCHECK(V->OverstoryHeight, VOVER(i), "Veg.OverstoryHeight", !(V->OverstoryHeight[i] > 0.0),
+  VCHECK(V->OverstoryHeight, VOVER(i), CM_OVERHEIGHT, !(V->OverstoryHeight[i] > 0.0),
          "height <= 0 on overstory cells", "height");
-  VCHECK(V->UnderstoryCover, VUNDER(i), "Veg.UnderstoryCover",
+  VCHECK(V->UnderstoryCover, VUNDER(i), CM_UNDERCOVER,
          !(V->UnderstoryCover[i] >= 0.0 && V->UnderstoryCover[i] <= 1.0),
          "cover not in [0, 1] on understory cells", "cover");
-  VCHECK(V->UnderstoryLAI, VCOVERED(i), "Veg.UnderstoryLAI", !(V->UnderstoryLAI[i] > 0.0),
+  VCHECK(V->UnderstoryLAI, VCOVERED(i), CM_UNDERLAI, !(V->UnderstoryLAI[i] > 0.0),
          "LAI <= 0 on understory cells with cover > 0", "LAI");
-  VCHECK(V->UnderstoryHeight, VCOVERED(i), "Veg.UnderstoryHeight",
+  VCHECK(V->UnderstoryHeight, VCOVERED(i), CM_UNDERHEIGHT,
          !(V->UnderstoryHeight[i] > 0.0), "height <= 0 on understory cells with cover > 0",
          "height");
 
@@ -220,6 +247,8 @@ void ValidateVegMaps(MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V, VEGTABLES *V
 #undef VOVER
 #undef VUNDER
 #undef VCOVERED
+#undef VFAIL
+#undef CLASSCHECK
 #undef VCHECK
 }
 
@@ -298,17 +327,20 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
       if (INMASK(i) && Raw->SoilClass[i] == MAP_NODATA_BYTE)
         Fail(&F, y, x, Raw->SoilClass[i], 0);
   ReportCells(&F, "Soil.Class", "no-data", "Soil.Class", NULL);
-  CHECK_NODATA(Raw->Depth, INMASK(i), "Soil.Depth");
-  CHECK_NODATA(Raw->LateralConductivity, INMASK(i), "Soil.LateralConductivity");
-  CHECK_NODATA(Raw->ExponentialDecrease, INMASK(i), "Soil.ExponentialDecrease");
+  ClassMapName(Name, sizeof(Name), Options, CM_DEPTH, 0, L, "");
+  CHECK_NODATA(Raw->Depth, INMASK(i), Name);
+  ClassMapName(Name, sizeof(Name), Options, CM_KSLAT, 0, L, "");
+  CHECK_NODATA(Raw->LateralConductivity, INMASK(i), Name);
+  ClassMapName(Name, sizeof(Name), Options, CM_EXPDEC, 0, L, "");
+  CHECK_NODATA(Raw->ExponentialDecrease, INMASK(i), Name);
   for (k = 0; k <= L; k++) {
     Layer = Raw->Porosity + k * NCells;
-    SoilLayerName(Name, sizeof(Name), "Soil.Porosity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_POROSITY, k, L, "");
     CHECK_NODATA(Layer, INMASK(i), Name);
   }
   for (k = 0; k <= L; k++) {
     Layer = Raw->FieldCapacity + k * NCells;
-    SoilLayerName(Name, sizeof(Name), "Soil.FieldCapacity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_FCAP, k, L, "");
     CHECK_NODATA(Layer, INMASK(i), Name);
   }
   for (k = 0; k < L; k++) {
@@ -359,7 +391,7 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
   ReportCells(&F, "Soil.Class", Name, "Soil.Class", NULL);
 
   /* The vegetation maps */
-  ValidateVegMaps(Map, Raw->Mask, &(Raw->Veg), Veg, "");
+  ValidateVegMaps(Options, Map, Raw->Mask, &(Raw->Veg), Veg, "");
 
   /* Root zone layers thicker than 0.001 m */
   for (k = 0; k < L; k++) {
@@ -385,7 +417,8 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
       }
     }
   }
-  ReportCells(&F, "Soil.Depth", "depth < root zone depth + 0.01", "depth", "root zone depth");
+  ClassMapName(Name, sizeof(Name), Options, CM_DEPTH, 0, L, "");
+  ReportCells(&F, Name, "depth < root zone depth + 0.01", "depth", "root zone depth");
 
   /* Conductivity and exponential decrease, and their scales */
   memset(&F, 0, sizeof(F));
@@ -393,7 +426,8 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
     for (x = 0; x < Map->NX; x++, i++)
       if (INMASK(i) && !(Raw->LateralConductivity[i] > 0.0))
         Fail(&F, y, x, Raw->LateralConductivity[i], 0);
-  ReportCells(&F, "Soil.LateralConductivity", "value <= 0", "Soil.LateralConductivity", NULL);
+  ClassMapName(Name, sizeof(Name), Options, CM_KSLAT, 0, L, "");
+  ReportCells(&F, Name, "value <= 0", "Soil.LateralConductivity", NULL);
   if (!(SOIL_KSAT_ADJ > 0.0))
     ReportErrorCode(108, "[PARAMETERS] Lateral Conductivity Scale = %g: must be > 0",
                     SOIL_KSAT_ADJ);
@@ -402,7 +436,8 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
     for (x = 0; x < Map->NX; x++, i++)
       if (INMASK(i) && !(Raw->ExponentialDecrease[i] >= 0.0))
         Fail(&F, y, x, Raw->ExponentialDecrease[i], 0);
-  ReportCells(&F, "Soil.ExponentialDecrease", "value < 0", "Soil.ExponentialDecrease", NULL);
+  ClassMapName(Name, sizeof(Name), Options, CM_EXPDEC, 0, L, "");
+  ReportCells(&F, Name, "value < 0", "Soil.ExponentialDecrease", NULL);
   if (!(SOIL_EXPDEC_ADJ >= 0.0))
     ReportErrorCode(108, "[PARAMETERS] Exponential Decrease Scale = %g: must be >= 0",
                     SOIL_EXPDEC_ADJ);
@@ -420,7 +455,7 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
         }
       }
     }
-    SoilLayerName(Name, sizeof(Name), "Soil.FieldCapacity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_FCAP, k, L, "");
     ReportCells(&F, Name, "field capacity < wilting point + 0.01", "field capacity",
                 "wilting point");
   }
@@ -438,7 +473,7 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
         }
       }
     }
-    SoilLayerName(Name, sizeof(Name), "Soil.Porosity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_POROSITY, k, L, "");
     ReportCells(&F, Name, "porosity < field capacity + 0.01", "porosity", "field capacity");
   }
 
@@ -454,29 +489,28 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
         }
       }
     }
-    SoilLayerName(Name, sizeof(Name), "Soil.Porosity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_POROSITY, k, L, "");
     ReportCells(&F, Name, "porosity > 1", "porosity", NULL);
   }
 
-  /* The scale of the overstory cover positive, the monthly LAI fractions of
-     every overstory and understory class positive */
+  /* The scales of the overstory and the understory cover positive, the
+     leafless LAI fraction of every deciduous overstory and understory class
+     positive */
   if (!(VEG_FC_ADJ > 0.0))
     ReportErrorCode(108, "[PARAMETERS] Overstory Cover Scale = %g: must be > 0", VEG_FC_ADJ);
+  if (!(VEG_UNDER_FC_ADJ > 0.0))
+    ReportErrorCode(108, "[PARAMETERS] Understory Cover Scale = %g: must be > 0", VEG_UNDER_FC_ADJ);
   RequireConfigValue(Input, "INPUTS", "Overstory Table", Path);
   for (i = 0; i < Veg->NOver; i++) {
-    for (k = 0; k < 12; k++) {
-      if (!(Veg->Over[i].Story.LAIFraction[k] > 0.0))
-        ReportErrorCode(108, "%s: line %d: LAIFraction_%s = %g must be > 0", Path, i + 3,
-                        MonthNames[k], Veg->Over[i].Story.LAIFraction[k]);
-    }
+    if (!(Veg->Over[i].Story.MinLAIFraction > 0.0))
+      ReportErrorCode(108, "%s: line %d: MinLAIFraction = %g must be > 0", Path, i + 3,
+                      Veg->Over[i].Story.MinLAIFraction);
   }
   RequireConfigValue(Input, "INPUTS", "Understory Table", Path);
   for (i = 0; i < Veg->NUnder; i++) {
-    for (k = 0; k < 12; k++) {
-      if (!(Veg->Under[i].Story.LAIFraction[k] > 0.0))
-        ReportErrorCode(108, "%s: line %d: LAIFraction_%s = %g must be > 0", Path, i + 3,
-                        MonthNames[k], Veg->Under[i].Story.LAIFraction[k]);
-    }
+    if (!(Veg->Under[i].Story.MinLAIFraction > 0.0))
+      ReportErrorCode(108, "%s: line %d: MinLAIFraction = %g must be > 0", Path, i + 3,
+                      Veg->Under[i].Story.MinLAIFraction);
   }
 
   /* Lake IDs in the lake table (Lake Dynamics) */
@@ -515,7 +549,8 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
   The porosity after the field capacity and porosity parameters at
   most 1
 *****************************************************************************/
-void ValidateParameters(MAPSIZE *Map, TOPOPIX **TopoMap, SOILPIX **SoilMap)
+void ValidateParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, TOPOPIX **TopoMap,
+  SOILPIX **SoilMap)
 {
   int x, y, k;
   int L = Map->SoilLayers;
@@ -530,7 +565,7 @@ void ValidateParameters(MAPSIZE *Map, TOPOPIX **TopoMap, SOILPIX **SoilMap)
           Fail(&F, y, x, SoilMap[y][x].Porosity[k], SoilMap[y][x].FCap[k]);
       }
     }
-    SoilLayerName(Name, sizeof(Name), "Soil.Porosity", k, L);
+    ClassMapName(Name, sizeof(Name), Options, CM_POROSITY, k, L, "");
     strcat(Name, " x Porosity Scale");
     ReportCells(&F, Name, "porosity > 1", "porosity", "field capacity");
   }

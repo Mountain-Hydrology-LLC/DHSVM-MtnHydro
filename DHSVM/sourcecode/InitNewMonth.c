@@ -16,8 +16,8 @@
 
  /*****************************************************************************
    InitNewMonth()
-   At the start of a new month, read the new radiation files
-   (diffuse and direct beam), and potentially a new LAI value.
+   At the start of a new month, read the new PRISM field and set the
+   albedo of the month (the LAI changes daily, InitNewDayLAI).
  *****************************************************************************/
 void InitNewMonth(TIMESTRUCT *Time, OPTIONSTRUCT *Options, MAPSIZE *Map,
   TOPOPIX **TopoMap, float **PrismMap, float **SnowPatternMap, float **SnowPatternMapBase,
@@ -66,14 +66,7 @@ void InitNewMonth(TIMESTRUCT *Time, OPTIONSTRUCT *Options, MAPSIZE *Map,
     
   }
 
-  Message("changing LAI, albedo and diffuse transmission parameters\n");
-
-  for (y = 0; y < Map->NY; y++) {
-		for (x = 0; x < Map->NX; x++) {
-      if (INBASIN(TopoMap[y][x].Mask))
-        SetCellMonth(Options, Veg, &((*VegMap)[y][x]), Time->Current.Month);
-		}
-	}
+  Message("changing albedo parameters\n");
 
   /* Albedo of the month of every overstory and understory class */
   for (i = 0; i < Veg->NOver; i++) {
@@ -97,21 +90,62 @@ void InitNewMonth(TIMESTRUCT *Time, OPTIONSTRUCT *Options, MAPSIZE *Map,
 
 
 /*****************************************************************************
-  SetCellMonth()
+  StoryLAIFraction()
 
-  The LAI of the month of each vegetation layer of a mask cell, its
-  interception capacity, the shortwave transmittance of the understory from
-  its LAI, and the diffuse transmittance of the overstory from its LAI
-  (hemispherical integration of the beam transmittance, 2 E3(k LAI))
+  The LAI of a story on day of year Day (January 1 = 1) as a fraction of its
+  full-leaf LAI: 1 if evergreen; deciduous MinLAIFraction + (1 -
+  MinLAIFraction) x the leaf-on logistic x the leaf-off logistic, their
+  product rounded to the nearest 0.01
 *****************************************************************************/
-void SetCellMonth(OPTIONSTRUCT *Options, VEGTABLES *Veg, VEGPIX *Cell, int Month)
+float StoryLAIFraction(STORYTABLE *Story, int Day)
+{
+  double On, Off, Leaf;
+
+  if (!Story->Deciduous)
+    return 1.0;
+  On = 1.0 / (1.0 + exp(-Story->LeafOnSlope * (Day - Story->LeafOnMid)));
+  Off = 1.0 / (1.0 + exp(-Story->LeafOffSlope * (Day - Story->LeafOffMid)));
+  Leaf = floor(100.0 * On * Off + 0.5) / 100.0;
+  return Story->MinLAIFraction + (1.0 - Story->MinLAIFraction) * Leaf;
+}
+
+/*****************************************************************************
+  InitNewDayLAI()
+
+  The LAI of day of year Day on every mask cell (SetCellLAI), at the start
+  of the run and of each day
+*****************************************************************************/
+void InitNewDayLAI(MAPSIZE *Map, TOPOPIX **TopoMap, VEGTABLES *Veg, VEGPIX **VegMap, int Day)
+{
+  int y, x;
+
+  for (y = 0; y < Map->NY; y++) {
+    for (x = 0; x < Map->NX; x++) {
+      if (INBASIN(TopoMap[y][x].Mask))
+        SetCellLAI(Veg, &(VegMap[y][x]), Day);
+    }
+  }
+}
+
+/*****************************************************************************
+  SetCellLAI()
+
+  The LAI of day of year Day of each vegetation layer of a mask cell (its
+  full-leaf LAI times its story's StoryLAIFraction), its interception
+  capacity, the shortwave transmittance of the understory from its LAI, and
+  the diffuse transmittance of the overstory from its LAI (hemispherical
+  integration of the beam transmittance, 2 E3(k LAI))
+*****************************************************************************/
+void SetCellLAI(VEGTABLES *Veg, VEGPIX *Cell, int Day)
 {
   OVERTABLE *Over = OverstoryRow(Veg, Cell);
+  STORYTABLE *Story;
   int j;
   float l;
 
   for (j = 0; j < Cell->NVegLayers; j++) {
-    Cell->LAI[j] = Cell->LAIMonthly[j][Month - 1];
+    Story = (j == 0 && Cell->OverStory) ? &(Over->Story) : &(UnderstoryRow(Veg, Cell)->Story);
+    Cell->LAI[j] = Cell->LAIFull[j] * StoryLAIFraction(Story, Day);
     /*Due to LAI and FC change, have to change MaxInt to spatial as well*/
     Cell->MaxInt[j] = Cell->LAI[j] * Cell->Fract[j] * LAI_WATER_MULTIPLIER;
   }

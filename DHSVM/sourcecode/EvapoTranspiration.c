@@ -23,7 +23,7 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
   float NetRad, float Rp, STORYTABLE *Story, SOILTABLE *SType,
   float MoistureFlux, float *Moist, float *SoilTemp, float *Int,
   float *EPot, float *EInt, float **ESoil, float *EAct, float *ETot,
-  float *Adjust, float *LayerThickness, float Ra, VEGPIX *LocalVeg,
+  float *Adjust, float *LayerThickness, float *FCap, float Ra, VEGPIX *LocalVeg,
   CANOPYSCHEME *Canopy)
 {
   float *Rc;			/* canopy resistance associated with
@@ -132,7 +132,7 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
 
   /* calculate the canopy resistances associated with the conditions in
   each of the soil layers, and the layers' shares of the transpiration */
-  CanopyResistanceLayers(Layer, Met, Rp, Story, SType, Moist, SoilTemp, LocalVeg,
+  CanopyResistanceLayers(Layer, Met, Rp, Story, SType, FCap, Moist, SoilTemp, LocalVeg,
     Canopy, Rc, Share);
   Canopy->An *= F;
 

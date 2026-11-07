@@ -124,9 +124,11 @@ float ChannelSoilEvaporation(int Dt, float DXDY,
 /*****************************************************************************
  SoilEvaporation()
 
- Evaporation from the soil of the whole cell, under and outside the
- understory; *PotEvap returns the potential evaporation after the overlying
- demand (m per time step). Two stages, per unit ground area:
+ Evaporation from the soil of the cell's bare fraction BareFract (outside
+ the litter, under and outside the understory); *PotEvap returns the
+ potential evaporation after the overlying demand (m per time step). Two
+ stages, per unit bare ground area, which take BareFract times their depth
+ from the layer's mean moisture:
  1. Above the field capacity the soil evaporates at the potential rate, down
     to the field capacity, and *DesorptionAcc is 0.
  2. At or below the field capacity, the rest of the step's potential
@@ -142,7 +144,7 @@ float SoilEvaporation(int Dt,
                       float AirDens, float Vpd, float NetRad, float RaSoil,
                       float Evapotranspiration, float Porosity, float FCap, float Ks,
                       float Press, float m, float WP, float RootDepth,
-                      float *MoistContent, float Adjust, float *PotEvap,
+                      float *MoistContent, float Adjust, float BareFract, float *PotEvap,
                       float *DesorptionAcc)
 {
   float DesorptionVolume;	/* Amount of water the soil can deliver to the atmosphere during a timestep (m) */
@@ -176,10 +178,10 @@ float SoilEvaporation(int Dt,
     StageEvap = (*MoistContent - FCap) * RootDepth;
     if (EPot < StageEvap) {
       StageEvap = EPot;
-      *MoistContent -= StageEvap / RootDepth;
+      *MoistContent -= BareFract * StageEvap / RootDepth;
     }
     else
-      *MoistContent = FCap;
+      *MoistContent = FCap + (1. - BareFract) * (*MoistContent - FCap);
     GroundEvap = StageEvap;
     EPot -= StageEvap;
   }
@@ -200,14 +202,14 @@ float SoilEvaporation(int Dt,
 
     if (StageEvap >= (*MoistContent - Floor) * RootDepth) {
       StageEvap = (*MoistContent - Floor) * RootDepth;
-      *MoistContent = Floor;
+      *MoistContent = Floor + (1. - BareFract) * (*MoistContent - Floor);
     }
     else
-      *MoistContent -= StageEvap / RootDepth;
+      *MoistContent -= BareFract * StageEvap / RootDepth;
 
     *DesorptionAcc += StageEvap;
     GroundEvap += StageEvap;
   }
 
-  return GroundEvap * Adjust;
+  return GroundEvap * BareFract * Adjust;
 }

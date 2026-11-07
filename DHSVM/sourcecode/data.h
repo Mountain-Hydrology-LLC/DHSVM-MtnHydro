@@ -237,7 +237,9 @@ typedef struct {
 } GRID;
 
 /* Vegetation updates: at each instant the eight Veg.* maps of the cells are
-   replaced by the maps <Directory>Veg.<Variable>.<stamp>.map */
+   replaced by the maps <Directory>Veg.<Variable>.<stamp>.map (the two class
+   maps and the maps whose [INPUTS] keys are given; the others are formed from
+   the class tables) */
 typedef struct {
   int N;                        /* Updates in the config */
   DATE *Time;                   /* Instant of each update */
@@ -246,8 +248,9 @@ typedef struct {
   int Next;                     /* First update applied during the run */
 } VEGUPDATES;
 
-/* The eight vegetation maps of the cells, as read (each array NY x NX, row
-   after row): the input maps or the maps of one vegetation update */
+/* The eight vegetation maps of the cells, as read or formed from the class
+   tables (each array NY x NX, row after row): the input maps or the maps of
+   one vegetation update */
 typedef struct {
   unsigned char *OverstoryClass;	/* Row of the overstory table, 0 = none */
   unsigned char *UnderstoryClass;	/* Row of the understory table, 0 = none */
@@ -258,6 +261,30 @@ typedef struct {
   float *UnderstoryLAI;			/* LAI per covered area */
   float *UnderstoryHeight;
 } VEGMAPS;
+
+/* The soil and vegetation maps a class table can give (ClassMaps[] and
+   OPTIONSTRUCT.FromTable[] order): without its [INPUTS] key a map is formed
+   from a column of the class table through the class map */
+#define CM_DEPTH        0
+#define CM_KSLAT        1
+#define CM_EXPDEC       2
+#define CM_POROSITY     3
+#define CM_FCAP         4
+#define CM_OVERCOVER    5	/* the three overstory maps in this order */
+#define CM_OVERLAI      6
+#define CM_OVERHEIGHT   7
+#define CM_UNDERCOVER   8	/* the three understory maps in this order */
+#define CM_UNDERLAI     9
+#define CM_UNDERHEIGHT 10
+#define NCLASSMAPS     11
+
+typedef struct {
+  const char *Name;		/* Map name and [INPUTS] key */
+  const char *Table;		/* [INPUTS] key of the class table */
+  const char *Column;		/* Class column (base of the soil layer columns) */
+  const char *Units;
+  int LayerSet;			/* MAP_ONE or MAP_SOIL */
+} CLASSMAP;
 
 typedef struct {
   int FlowGradient;			/* Specifies whether the flow gradient is based
@@ -295,10 +322,12 @@ typedef struct {
   MAPFILE HorizonAngle;        /* Horizon angle map, open until the shading is set up */
   char LakeTablePath[BUFSIZE + 1];    /* Lake table, for messages */
   VEGUPDATES VegUpdates;       /* Vegetation maps replaced during the run */
+  int FromTable[NCLASSMAPS];   /* TRUE: the map (and each update's) is formed from its class table */
 } OPTIONSTRUCT;
 
-/* The input maps as read, before the parameters apply (each array NY x NX
-   per layer, row after row; NULL when the run does not use the map) */
+/* The input maps as read or formed from the class tables, before the
+   parameters apply (each array NY x NX per layer, row after row; NULL when
+   the run does not use the map) */
 typedef struct {
   float *Elevation;
   unsigned char *Mask;
@@ -493,6 +522,8 @@ typedef struct {
   float *KsVert;         /* Soil Vertical Conductivity - each layer */
   float *Porosity;       /* Soil Porosity - each layer */
   float *FCap;			     /* Soil Field Capacity - each layer */
+  float *PoreDist;       /* Brooks-Corey pore size distribution index - each layer */
+  float *Press;          /* Brooks-Corey bubbling pressure (m) - each layer */
   float *LayerThickness; /* Thickness of each root zone layer (m) */
   float TotalThickness;  /* Sum of LayerThickness from 0.0 in layer order (m) */
 } SOILPIX;
@@ -503,10 +534,13 @@ typedef struct {
   int NLayers;				/* Number of root zone layers (the deep layer is index NLayers) */
   float Albedo;				/* Albedo of the soil surface */
   float Manning;      /* Manning's roughness of the soil surface */
-  float *PoreDist;			/* Pore size distribution for each layer and the deep layer */
-  float *Press;				/* Soil bubbling pressure for each layer and the deep layer */
   float *WP;				/* Wilting point for each layer and the deep layer */
   float *Ks;				/* Saturated hydraulic conductivity (vertical) for each layer and the deep layer */
+  float *Porosity;			/* Porosity of each layer and the deep layer (Soil.Porosity from the table) */
+  float *FCap;				/* Field capacity of each layer and the deep layer (Soil.FieldCapacity from the table) */
+  float Depth;				/* Soil depth (m), Soil.Depth from the table */
+  float KsLat;				/* Lateral conductivity (m/s), Soil.LateralConductivity from the table */
+  float KsLatExp;			/* Exponential decrease (1/m), Soil.ExponentialDecrease from the table */
   float DepthThresh;    /* Threshold water table depth, beyond which transmissivity decays linearly with water table depth */
   float KsAnisotropy; /* KsVert = KsLat / KsAnisotropy */
   float MaxInfiltrationRate; /* Maximum infiltration rate for upper layer (m/s) */
@@ -567,8 +601,8 @@ typedef struct {
   unsigned char UnderStory;	    /* TRUE if the cell has an understory layer (UnderClass > 0
                                    and understory cover > 0) */
   int NVegLayers;		        /* Vegetation layers of the cell (0-2) */
-  float UnderstoryCover;	    /* Understory cover from its map (0-1), 0 without an understory
-                                   layer */
+  float UnderstoryCover;	    /* Understory cover: its map times its scale, at most 1 (0-1),
+                                   0 without an understory layer */
   float Tcanopy;		        /* Canopy temperature (C) */
   float TAcclim;		        /* Cold-acclimation temperature of the photosynthesis (C) */
   float TGrowth;		        /* Growth temperature: the 10-day mean air temperature (C) */
@@ -577,9 +611,9 @@ typedef struct {
   float MeltEnergy;			    /* Energy used to melt snow and change of cold content
                                 of snow pack */
   float *Fract;                  /* Fractional Coverage*/
-  float *LAI;                  /* LAI of the month*/
+  float *LAI;                  /* LAI of the day (SetCellLAI) */
   float *Height;                /* Height of each vegetation layer (m), from the height maps */
-  float **LAIMonthly;                  /* LAI of all months*/ 
+  float *LAIFull;              /* Full-leaf LAI of each layer: its LAI map times its scale */
   float *MaxInt;                  /* Max Interception*/   
   float Taud;                     /* Transmittance of the overstory for diffuse radiation in the month */
   float TauU;                     /* Shortwave transmittance of the understory in the month
@@ -596,7 +630,9 @@ typedef struct {
   float RsMax;			/* Maximum stomatal resistance (s/m), JARVIS */
   float RsMin;			/* Minimum stomatal resistance (s/m), JARVIS */
   float MoistThres;		/* Soil moisture threshold above which soil
-				   moisture does not restrict transpiration */
+				   moisture does not restrict transpiration,
+				   relative: 0 at the wilting point, 1 at
+				   field capacity */
   float VpdThres;		/* Vapor pressure deficit threshold above which
 				   stomatal closure occurs (Pa), JARVIS */
   float Rpc;			/* Visible radiation of half the maximum light factor (W/m2), JARVIS */
@@ -607,7 +643,15 @@ typedef struct {
   float *RootFract;		/* Fraction of roots in each root zone layer */
   float AlbedoMonthly[12];	/* Albedo of each month */
   float Albedo;			/* Albedo of the current month */
-  float LAIFraction[12];	/* LAI of each month as a fraction of the story's LAI map */
+  int Deciduous;		/* 1: the LAI follows the leaf-on and leaf-off logistics, 0: full LAI */
+  float LeafOnMid;		/* Day of year of the leaf-on logistic's midpoint (January 1 = 1), deciduous */
+  float LeafOnSlope;		/* Slope of the leaf-on logistic (logit/day), deciduous */
+  float LeafOffMid;		/* Day of year of the leaf-off logistic's midpoint, deciduous */
+  float LeafOffSlope;		/* Slope of the leaf-off logistic (logit/day, negative), deciduous */
+  float MinLAIFraction;		/* LAI without leaves as a fraction of the full LAI, deciduous */
+  float Cover;			/* Cover (fraction): the story's cover map from the table */
+  float LAI;			/* LAI (m2/m2): the story's LAI map from the table */
+  float Height;			/* Height (m): the story's height map from the table */
 } STORYTABLE;
 
 /* One row of the overstory table */
@@ -627,6 +671,7 @@ typedef struct {
   char Desc[BUFSIZE + 1];	/* Name */
   STORYTABLE Story;		/* Stomatal, root, albedo and LAI parameters */
   float RadAtten;		/* Shortwave attenuation coefficient of the understory per unit LAI */
+  float LitterCover;		/* Fraction of the cell under litter, where the soil does not evaporate */
   float ImpervFrac;		/* fraction of pixel that is impervious */
   float DetentionFrac;		/* fraction of flow on impervious area goes to flood detention storage */
   float DetentionDecay;		/* Decay coefficient of linear reservoir storage for impervious surface detention facility */

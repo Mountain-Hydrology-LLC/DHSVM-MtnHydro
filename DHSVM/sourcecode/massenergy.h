@@ -25,11 +25,11 @@ typedef struct {
 } CANOPYSCHEME;
 
 float CanopyResistance(float LAI, float RsMin, float RsMax, float Rpc,
-		       float VpdThres, float MoistThres, float WP,
+		       float VpdThres, float MoistThres, float WP, float FCap,
 		       float TSoil, float SoilMoisture, float Vpd, float Rp);
 
 void CanopyResistanceLayers(int Layer, PIXMET *Met, float Rp, STORYTABLE *Story,
-                            SOILTABLE *SType, float *Moist, float *SoilTemp,
+                            SOILTABLE *SType, float *FCap, float *Moist, float *SoilTemp,
                             VEGPIX *LocalVeg, CANOPYSCHEME *Canopy, float *Rc,
                             float *Share);
 
@@ -40,7 +40,7 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
               float NetRad, float Rp, STORYTABLE *Story, SOILTABLE *SType,
               float MoistureFlux, float *Moist, float *Temp, float *Int,
               float *EPot, float *EInt, float **ESoil, float *EAct,
-              float *ETot, float *Adjust, float *LayerThickness, float Ra,
+              float *ETot, float *Adjust, float *LayerThickness, float *FCap, float Ra,
               VEGPIX *LocalVeg, CANOPYSCHEME *Canopy);
 
 void InterceptionStorage(int NAct, float *MaxInt, float *Fract, float *Int,
@@ -87,7 +87,7 @@ float SoilEvaporation(int Dt,
                       float AirDens, float Vpd, float NetRad, float RaSoil,
                       float Evapotranspiration, float Porosity, float FCap, float Ks,
                       float Press, float m, float WP, float RootDepth,
-                      float *MoistContent, float Adjust, float *PotEvap,
+                      float *MoistContent, float Adjust, float BareFract, float *PotEvap,
                       float *DesorptionAcc);
 
 float StabilityCorrection(float Z, float d, float Tsurf, float Tair,

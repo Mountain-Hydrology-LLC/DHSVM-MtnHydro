@@ -15,6 +15,27 @@
 
 static void *ReadMap(LISTPTR Input, const char *Name, int NumberType, const char *Units,
                      int LayerSet, MAPSIZE *Map);
+static float *ReadGivenMap(LISTPTR Input, OPTIONSTRUCT *Options, int m, MAPSIZE *Map);
+static float ClassValue(int m, int Layer, int Row, SOILTABLE *SType, VEGTABLES *Veg);
+static float *FormMap(int m, const unsigned char *Class, int NClasses, MAPSIZE *Map,
+                      SOILTABLE *SType, VEGTABLES *Veg);
+
+/* The soil and vegetation maps a class table can give, CM_* order: map
+   name ([INPUTS] key), class table ([INPUTS] key), class column, units,
+   layer set */
+const CLASSMAP ClassMaps[NCLASSMAPS] = {
+  {"Soil.Depth", "Soil Table", "Depth", "m", MAP_ONE},
+  {"Soil.LateralConductivity", "Soil Table", "LateralConductivity", "m/s", MAP_ONE},
+  {"Soil.ExponentialDecrease", "Soil Table", "ExponentialDecrease", "1/m", MAP_ONE},
+  {"Soil.Porosity", "Soil Table", "Porosity", "m3/m3", MAP_SOIL},
+  {"Soil.FieldCapacity", "Soil Table", "FieldCapacity", "m3/m3", MAP_SOIL},
+  {"Veg.OverstoryCover", "Overstory Table", "Cover", "fraction", MAP_ONE},
+  {"Veg.OverstoryLAI", "Overstory Table", "LAI", "m2/m2", MAP_ONE},
+  {"Veg.OverstoryHeight", "Overstory Table", "Height", "m", MAP_ONE},
+  {"Veg.UnderstoryCover", "Understory Table", "Cover", "fraction", MAP_ONE},
+  {"Veg.UnderstoryLAI", "Understory Table", "LAI", "m2/m2", MAP_ONE},
+  {"Veg.UnderstoryHeight", "Understory Table", "Height", "m", MAP_ONE}
+};
 
 /*****************************************************************************
   ReadMap()
@@ -34,12 +55,22 @@ static void *ReadMap(LISTPTR Input, const char *Name, int NumberType, const char
   return Values;
 }
 
+/* Map m of ClassMaps[] as read, NULL when FormClassMaps() forms it */
+static float *ReadGivenMap(LISTPTR Input, OPTIONSTRUCT *Options, int m, MAPSIZE *Map)
+{
+  if (Options->FromTable[m])
+    return NULL;
+  return ReadMap(Input, ClassMaps[m].Name, NC_FLOAT, ClassMaps[m].Units, ClassMaps[m].LayerSet,
+                 Map);
+}
+
 /*****************************************************************************
   ReadInputMaps()
 
   Reads every input map the run uses, as given (the values are checked by
-  ValidateInputs(), then ApplyParameters() applies the parameters). The
-  monthly precipitation pattern stays open: its layers are read by
+  ValidateInputs(), then ApplyParameters() applies the parameters); the soil
+  and vegetation maps without an [INPUTS] key are formed by FormClassMaps().
+  The monthly precipitation pattern stays open: its layers are read by
   ValidateInputs() and, a month at a time, by InitNewMonth().
 *****************************************************************************/
 void ReadInputMaps(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *Raw)
@@ -62,25 +93,20 @@ void ReadInputMaps(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS
   }
 
   Raw->SoilClass = ReadMap(Input, "Soil.Class", NC_BYTE, "-", MAP_ONE, Map);
-  Raw->Depth = ReadMap(Input, "Soil.Depth", NC_FLOAT, "m", MAP_ONE, Map);
-  Raw->LateralConductivity =
-    ReadMap(Input, "Soil.LateralConductivity", NC_FLOAT, "m/s", MAP_ONE, Map);
-  Raw->ExponentialDecrease =
-    ReadMap(Input, "Soil.ExponentialDecrease", NC_FLOAT, "1/m", MAP_ONE, Map);
-  Raw->Porosity = ReadMap(Input, "Soil.Porosity", NC_FLOAT, "m3/m3", MAP_SOIL, Map);
-  Raw->FieldCapacity = ReadMap(Input, "Soil.FieldCapacity", NC_FLOAT, "m3/m3", MAP_SOIL, Map);
+  Raw->Depth = ReadGivenMap(Input, Options, CM_DEPTH, Map);
+  Raw->LateralConductivity = ReadGivenMap(Input, Options, CM_KSLAT, Map);
+  Raw->ExponentialDecrease = ReadGivenMap(Input, Options, CM_EXPDEC, Map);
+  Raw->Porosity = ReadGivenMap(Input, Options, CM_POROSITY, Map);
+  Raw->FieldCapacity = ReadGivenMap(Input, Options, CM_FCAP, Map);
   Raw->LayerThickness = ReadMap(Input, "Soil.LayerThickness", NC_FLOAT, "m", MAP_ROOT, Map);
   Raw->Veg.OverstoryClass = ReadMap(Input, "Veg.OverstoryClass", NC_BYTE, "-", MAP_ONE, Map);
   Raw->Veg.UnderstoryClass = ReadMap(Input, "Veg.UnderstoryClass", NC_BYTE, "-", MAP_ONE, Map);
-  Raw->Veg.OverstoryCover =
-    ReadMap(Input, "Veg.OverstoryCover", NC_FLOAT, "fraction", MAP_ONE, Map);
-  Raw->Veg.OverstoryLAI = ReadMap(Input, "Veg.OverstoryLAI", NC_FLOAT, "m2/m2", MAP_ONE, Map);
-  Raw->Veg.OverstoryHeight = ReadMap(Input, "Veg.OverstoryHeight", NC_FLOAT, "m", MAP_ONE, Map);
-  Raw->Veg.UnderstoryCover =
-    ReadMap(Input, "Veg.UnderstoryCover", NC_FLOAT, "fraction", MAP_ONE, Map);
-  Raw->Veg.UnderstoryLAI = ReadMap(Input, "Veg.UnderstoryLAI", NC_FLOAT, "m2/m2", MAP_ONE, Map);
-  Raw->Veg.UnderstoryHeight =
-    ReadMap(Input, "Veg.UnderstoryHeight", NC_FLOAT, "m", MAP_ONE, Map);
+  Raw->Veg.OverstoryCover = ReadGivenMap(Input, Options, CM_OVERCOVER, Map);
+  Raw->Veg.OverstoryLAI = ReadGivenMap(Input, Options, CM_OVERLAI, Map);
+  Raw->Veg.OverstoryHeight = ReadGivenMap(Input, Options, CM_OVERHEIGHT, Map);
+  Raw->Veg.UnderstoryCover = ReadGivenMap(Input, Options, CM_UNDERCOVER, Map);
+  Raw->Veg.UnderstoryLAI = ReadGivenMap(Input, Options, CM_UNDERLAI, Map);
+  Raw->Veg.UnderstoryHeight = ReadGivenMap(Input, Options, CM_UNDERHEIGHT, Map);
 
   Options->PrecipPattern.Ptr = NULL;
   if (Options->Prism) {
@@ -98,6 +124,103 @@ void ReadInputMaps(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS
     Raw->LakeID = ReadMap(Input, "Lake.ID", NC_BYTE, "-", MAP_ONE, Map);
   if (!IsEmptyStr(Options->InitialSWEPath))
     Raw->InitialSWE = ReadMap(Input, "Snow.InitialSWE", NC_FLOAT, "m", MAP_ONE, Map);
+}
+
+/* Value of map m of ClassMaps[] (soil layer Layer) of class row Row */
+static float ClassValue(int m, int Layer, int Row, SOILTABLE *SType, VEGTABLES *Veg)
+{
+  switch (m) {
+  case CM_DEPTH:
+    return SType[Row].Depth;
+  case CM_KSLAT:
+    return SType[Row].KsLat;
+  case CM_EXPDEC:
+    return SType[Row].KsLatExp;
+  case CM_POROSITY:
+    return SType[Row].Porosity[Layer];
+  case CM_FCAP:
+    return SType[Row].FCap[Layer];
+  case CM_OVERCOVER:
+    return Veg->Over[Row].Story.Cover;
+  case CM_OVERLAI:
+    return Veg->Over[Row].Story.LAI;
+  case CM_OVERHEIGHT:
+    return Veg->Over[Row].Story.Height;
+  case CM_UNDERCOVER:
+    return Veg->Under[Row].Story.Cover;
+  case CM_UNDERLAI:
+    return Veg->Under[Row].Story.LAI;
+  default:
+    return Veg->Under[Row].Story.Height;
+  }
+}
+
+/* Map m of ClassMaps[] formed from its class column: on every layer the
+   value of the cell's class where the class map holds a row 1..NClasses,
+   0 elsewhere (a vegetation class 0 has no story and leaves it unused; a
+   soil class 0, a class outside the table or no-data is reported by the
+   class checks) */
+static float *FormMap(int m, const unsigned char *Class, int NClasses, MAPSIZE *Map,
+                      SOILTABLE *SType, VEGTABLES *Veg)
+{
+  size_t NCells = (size_t) Map->NY * Map->NX;
+  int NLayers = MapLayerCount(ClassMaps[m].LayerSet, Map->SoilLayers);
+  float *Values;
+  size_t i;
+  int k;
+
+  if (!(Values = (float *) calloc(NCells * NLayers, sizeof(float))))
+    ReportError("FormMap", 1);
+  for (k = 0; k < NLayers; k++) {
+    for (i = 0; i < NCells; i++) {
+      if (Class[i] >= 1 && Class[i] <= NClasses)
+        Values[k * NCells + i] = ClassValue(m, k, Class[i] - 1, SType, Veg);
+    }
+  }
+  return Values;
+}
+
+/*****************************************************************************
+  FormVegMaps()
+
+  The vegetation maps of V without an [INPUTS] key, formed from the
+  overstory and understory tables through the class maps of V
+*****************************************************************************/
+void FormVegMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, VEGTABLES *Veg, VEGMAPS *V)
+{
+  int m;
+
+  for (m = CM_OVERCOVER; m <= CM_OVERHEIGHT; m++) {
+    if (Options->FromTable[m])
+      *VegMapValues(V, m) = FormMap(m, V->OverstoryClass, Veg->NOver, Map, NULL, Veg);
+  }
+  for (m = CM_UNDERCOVER; m <= CM_UNDERHEIGHT; m++) {
+    if (Options->FromTable[m])
+      *VegMapValues(V, m) = FormMap(m, V->UnderstoryClass, Veg->NUnder, Map, NULL, Veg);
+  }
+}
+
+/*****************************************************************************
+  FormClassMaps()
+
+  The soil and vegetation input maps without an [INPUTS] key, formed from
+  the class tables through the class maps (after ReadInputMaps() and
+  InitTables(); checked with the maps as read by ValidateInputs())
+*****************************************************************************/
+void FormClassMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, LAYER *Soil, SOILTABLE *SType,
+                   VEGTABLES *Veg, INPUTMAPS *Raw)
+{
+  if (Options->FromTable[CM_DEPTH])
+    Raw->Depth = FormMap(CM_DEPTH, Raw->SoilClass, Soil->NTypes, Map, SType, NULL);
+  if (Options->FromTable[CM_KSLAT])
+    Raw->LateralConductivity = FormMap(CM_KSLAT, Raw->SoilClass, Soil->NTypes, Map, SType, NULL);
+  if (Options->FromTable[CM_EXPDEC])
+    Raw->ExponentialDecrease = FormMap(CM_EXPDEC, Raw->SoilClass, Soil->NTypes, Map, SType, NULL);
+  if (Options->FromTable[CM_POROSITY])
+    Raw->Porosity = FormMap(CM_POROSITY, Raw->SoilClass, Soil->NTypes, Map, SType, NULL);
+  if (Options->FromTable[CM_FCAP])
+    Raw->FieldCapacity = FormMap(CM_FCAP, Raw->SoilClass, Soil->NTypes, Map, SType, NULL);
+  FormVegMaps(Options, Map, Veg, &(Raw->Veg));
 }
 
 /*****************************************************************************

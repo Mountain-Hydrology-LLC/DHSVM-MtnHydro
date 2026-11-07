@@ -129,7 +129,7 @@ InitArray.o: InitArray.c functions.h data.h settings.h Calendar.h \
  channel.h DHSVMChannel.h getinit.h channel_grid.h
 InitConstants.o: InitConstants.c settings.h data.h Calendar.h channel.h \
  fileio.h DHSVMerror.h functions.h DHSVMChannel.h getinit.h \
- channel_grid.h constants.h output.h rad.h
+ channel_grid.h constants.h mapio.h output.h rad.h
 InitDump.o: InitDump.c settings.h data.h Calendar.h channel.h \
  DHSVMerror.h fileio.h functions.h DHSVMChannel.h getinit.h \
  channel_grid.h constants.h output.h registry.h tables.h
@@ -272,6 +272,9 @@ SnowStats.o: SnowStats.c settings.h data.h Calendar.h channel.h \
 Validate.o: Validate.c settings.h data.h Calendar.h channel.h \
  DHSVMerror.h fileio.h functions.h DHSVMChannel.h getinit.h \
  channel_grid.h constants.h mapio.h
+VegUpdates.o: VegUpdates.c settings.h data.h Calendar.h channel.h \
+ DHSVMerror.h fileio.h functions.h DHSVMChannel.h getinit.h \
+ channel_grid.h constants.h sizeofnt.h mapio.h
 
 # -------------------------------------------------------------
 # sources

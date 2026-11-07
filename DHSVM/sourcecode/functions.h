@@ -39,7 +39,9 @@ float ImperviousFraction(VEGTABLES *Veg, VEGPIX *Cell);
 
 float GroundAlbedo(VEGTABLES *Veg, VEGPIX *Cell, float SoilAlbedo, int Month);
 
-void SetCellMonth(OPTIONSTRUCT *Options, VEGTABLES *Veg, VEGPIX *Cell, int Month);
+void SetCellLAI(VEGTABLES *Veg, VEGPIX *Cell, int Day);
+float StoryLAIFraction(STORYTABLE *Story, int Day);
+void InitNewDayLAI(MAPSIZE *Map, TOPOPIX **TopoMap, VEGTABLES *Veg, VEGPIX **VegMap, int Day);
 
 void InitVegUpdateTimes(LISTPTR Input, OPTIONSTRUCT *Options, TIMESTRUCT *Time);
 
@@ -52,8 +54,10 @@ void ApplyVegUpdate(OPTIONSTRUCT *Options, TIMESTRUCT *Time, MAPSIZE *Map, TOPOP
 
 void FreeVegMaps(VEGMAPS *V);
 
-void ValidateVegMaps(MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V, VEGTABLES *Veg,
-  const char *Suffix);
+float **VegMapValues(VEGMAPS *V, int m);
+
+void ValidateVegMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, unsigned char *Mask, VEGMAPS *V,
+  VEGTABLES *Veg, const char *Suffix);
 
 void CheckInputFiles(LISTPTR Input, OPTIONSTRUCT *Options, int PointTable);
 
@@ -200,6 +204,11 @@ void PrintClassSummary(OPTIONSTRUCT *Options, VEGTABLES *Veg, LAYER Soil,
 
 void ReadInputMaps(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *Raw);
 
+void FormClassMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, LAYER *Soil, SOILTABLE *SType,
+  VEGTABLES *Veg, INPUTMAPS *Raw);
+
+void FormVegMaps(OPTIONSTRUCT *Options, MAPSIZE *Map, VEGTABLES *Veg, VEGMAPS *V);
+
 void ReadMetRecord(DATE *Current, METLOCATION *Station);
 
 int Round(double x);
@@ -251,7 +260,8 @@ void ValidateInputs(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAP
   LAYER *Soil, SOILTABLE *SType, VEGTABLES *Veg, int NStats,
   METLOCATION *Stat);
 
-void ValidateParameters(MAPSIZE *Map, TOPOPIX **TopoMap, SOILPIX **SoilMap);
+void ValidateParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, TOPOPIX **TopoMap,
+  SOILPIX **SoilMap);
 
 void ValidateWeights(MAPSIZE *Map, TOPOPIX **TopoMap, uchar ***MetWeights, int NStats);
 
