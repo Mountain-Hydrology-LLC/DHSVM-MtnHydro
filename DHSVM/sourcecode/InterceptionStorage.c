@@ -12,7 +12,7 @@
 InterceptionStorage()
 *****************************************************************************/
 void InterceptionStorage(int NAct, float *MaxInt, float *Fract,
-  float *Int, float *Precip)
+  float *Int, float *Precip, float *Overflow)
 {
   float Available;		/* Available storage */
   float Intercepted;	/* Amount of water intercepted during this timestep */
@@ -27,6 +27,8 @@ void InterceptionStorage(int NAct, float *MaxInt, float *Fract,
       Intercepted = (*Precip) * Fract[i];
     else
       Intercepted = Available;
+    /* Rain on the layer that its full storage passed on (per cell area) */
+    Overflow[i] = (*Precip) * Fract[i] - Intercepted;
     *Precip -= Intercepted;
     Int[i] += Intercepted;
   }

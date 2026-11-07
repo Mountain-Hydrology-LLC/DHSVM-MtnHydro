@@ -61,6 +61,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   float SnowWind;		    /* Wind 2 m above snow */
   float Tsurf;				/* Surface temperature used in LongwaveBalance (C) */
   int   NVegLActual;		/* Number of vegetation layers above snow */
+  float RainOverflow[MAXVEGLAYERS] = {0.0, 0.0}; /* Rain each layer's full interception storage passed on (m) */
   float DryChannelEvap;
   int   NVeg;               /* Vegetation layers of the cell (the soil's entry of EPot and EAct) */
 
@@ -171,7 +172,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     /* An exposed understory intercepts the rain passing the overstory */
     if (NVegLActual > 1)
       InterceptionStorage(1, &(LocalVeg->MaxInt[1]), &(LocalVeg->Fract[1]),
-        &(LocalPrecip->IntRain[1]), &(LocalPrecip->RainFall));
+        &(LocalPrecip->IntRain[1]), &(LocalPrecip->RainFall), &RainOverflow[1]);
   }
   /* if no snow */
   else if (LocalVeg->NVegLayers > 0) {
@@ -179,7 +180,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     LocalSnow->CanopyVaporMassFlux = 0.0;
     LocalPrecip->TempIntStorage = 0.0;
     InterceptionStorage(NVegLActual, LocalVeg->MaxInt, LocalVeg->Fract, LocalPrecip->IntRain,
-      &(LocalPrecip->RainFall));
+      &(LocalPrecip->RainFall), RainOverflow);
   }
 
   /* if snow is present, simulate the snow pack dynamics */
@@ -309,7 +310,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       Rp, &(Over->Story), SType, LocalVeg->MoistureFlux, LocalSoil->Moist, LocalSoil->Temp,
       &(LocalPrecip->IntRain[0]), LocalEvap->EPot, LocalEvap->EInt, LocalEvap->ESoil,
       LocalEvap->EAct, &(LocalEvap->ETot), LocalNetwork->Adjust, LocalSoil->LayerThickness,
-      LocalSoil->FCap, UpperRa, LocalVeg, &Canopy);
+      LocalSoil->FCap, UpperRa, LocalVeg, &Canopy, RainOverflow[0], &(LocalPrecip->RainFall));
     LocalVeg->MoistureFlux += LocalEvap->EAct[0] + LocalEvap->EInt[0];
     LocalEvap->Rc[0] = Canopy.Rc;
     LocalEvap->An[0] = Canopy.An;
@@ -360,7 +361,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       LocalSoil->Moist, LocalSoil->Temp,
       &(LocalPrecip->IntRain[Lower]), LocalEvap->EPot, LocalEvap->EInt, LocalEvap->ESoil,
       LocalEvap->EAct, &(LocalEvap->ETot), LocalNetwork->Adjust, LocalSoil->LayerThickness,
-      LocalSoil->FCap, LowerRa, LocalVeg, &Canopy);
+      LocalSoil->FCap, LowerRa, LocalVeg, &Canopy, RainOverflow[Lower], &(LocalPrecip->RainFall));
     LocalVeg->MoistureFlux += LocalEvap->EAct[Lower] + LocalEvap->EInt[Lower];
     LocalEvap->Rc[Lower] = Canopy.Rc;
     LocalEvap->An[Lower] = Canopy.An;

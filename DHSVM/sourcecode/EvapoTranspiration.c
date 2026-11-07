@@ -24,7 +24,7 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
   float MoistureFlux, float *Moist, float *SoilTemp, float *Int,
   float *EPot, float *EInt, float **ESoil, float *EAct, float *ETot,
   float *Adjust, float *LayerThickness, float *FCap, float Ra, VEGPIX *LocalVeg,
-  CANOPYSCHEME *Canopy)
+  CANOPYSCHEME *Canopy, float Overflow, float *Throughfall)
 {
   float *Rc;			/* canopy resistance associated with
                         conditions in each soil layer (s/m) */
@@ -40,6 +40,11 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
                         in interception storage (sec) */
   float MaxInt;			/* Maximum interception storage as if the entire pixel
                         is covered (m) */
+  float Wet;            /* Water the wet leaves can evaporate during the step:
+                        the storage plus the step's rain its full storage
+                        passed on (m) */
+  float Refill;         /* Rain taken back from the throughfall to refill the
+                        storage as it evaporates (m) */
   int i;			    /* counter */
 
 
@@ -89,12 +94,21 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
   previously wetted leaves can transpire during the remaining part of the
   time interval */
 
-  /* WORK IN PROGRESS:  the amount of interception storage can be replenished
-  during (low intensity) rainstorms */
+  /* The step's rain falls throughout the step: what the full storage passed
+  on (Overflow, at most the throughfall left) refills the storage as it
+  evaporates, so the wet leaves can evaporate the storage plus that rain, and
+  the storage ends at most full. The rain taken back leaves the throughfall.
+  Without overflow this is the storage alone. */
+  if (Overflow > *Throughfall)
+    Overflow = *Throughfall;
+  if (Overflow < 0.0)
+    Overflow = 0.0;
+  Overflow /= F;
+  Wet = *Int + Overflow;
 
   WetEvapRate = WetArea * EPot[Layer];
   if (WetEvapRate > 0) {
-    WetEvapTime = *Int / WetEvapRate;
+    WetEvapTime = Wet / WetEvapRate;
     if (WetEvapTime > Dt) {
       WetEvapTime = Dt;
     }
@@ -106,15 +120,18 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
 
   if (WetEvapRate > 0) {
     if (WetEvapTime < Dt) {
-      EInt[Layer] = *Int;
+      EInt[Layer] = Wet;
+      Refill = Overflow;
       *Int = 0.0;
       DryEvapTime = Dt - WetEvapTime;
     }
     else {
       EInt[Layer] = Dt * WetEvapRate;
-      *Int -= EInt[Layer];
+      Refill = MIN(EInt[Layer], Overflow);
+      *Int += Refill - EInt[Layer];
       DryEvapTime = 0.0;
     }
+    *Throughfall -= Refill * F;
   }
   else {
     EInt[Layer] = 0.0;

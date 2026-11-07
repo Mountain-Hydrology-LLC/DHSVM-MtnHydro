@@ -41,10 +41,10 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
               float MoistureFlux, float *Moist, float *Temp, float *Int,
               float *EPot, float *EInt, float **ESoil, float *EAct,
               float *ETot, float *Adjust, float *LayerThickness, float *FCap, float Ra,
-              VEGPIX *LocalVeg, CANOPYSCHEME *Canopy);
+              VEGPIX *LocalVeg, CANOPYSCHEME *Canopy, float Overflow, float *Throughfall);
 
 void InterceptionStorage(int NAct, float *MaxInt, float *Fract, float *Int,
-               float *Precip);
+               float *Precip, float *Overflow);
 
 void LongwaveBalance(unsigned char OverStory,
 			   float F, float Ld, float Tcanopy, float Tsurf,
