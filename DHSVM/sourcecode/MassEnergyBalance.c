@@ -85,12 +85,16 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   float SnowIce;            /* Ice of the snow's surface layer (m) */
   float SnowTemp;           /* and its temperature with the step's snowfall (C) */
   float SnowCap;            /* Heat capacity of that layer over the step (W/m2/K) */
+  float PackIce;            /* Ice of the whole pack (m) */
+  float SnowMax;            /* Heat that warms the pack with the step's snowfall to
+                               0 C and melts it over the step (W/m2) */
 #endif
   int   Exposed;            /* TRUE if the understory is above the snow at the start of the step,
                                with the step's snowfall */
   float NetShortL;          /* Net shortwave of the lower surface (W/m2) */
   float NetRadGround;       /* Net radiation of the ground (soil or snow) (W/m2) */
   float LongOutU;           /* Longwave emitted by the understory (W/m2) */
+  float Vf;                 /* Fraction of the cell opaque to longwave by the overstory */
   float SoilEvap;           /* Evaporation from the soil (m) */
   float SoilEPot;           /* Potential evaporation of the soil (m) */
   CANOPYSCHEME Canopy;      /* The stomatal scheme of the vegetation layers */
@@ -149,7 +153,9 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     TGround = LocalSoil->TSurf;
 #endif
 
-  /* calculate the radiation balance for pixels */
+  /* calculate the radiation balance for pixels; the overstory is opaque to
+     longwave over Vf */
+  Vf = OverstoryViewFactor(LocalVeg);
   RadiationBalance(Options,
     LocalVeg->OverStory, FuR, Cu, SineSolarAltitude,
     LocalMet->VICSin, LocalMet->Sin, LocalMet->SinBeam,
@@ -171,7 +177,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
 
   if (LocalVeg->OverStory == TRUE &&
     (LocalPrecip->IntSnow[0] || LocalPrecip->SnowFall > 0.0)) {
-    SnowInterception(Options, y, x, Dt, LocalVeg->Fract[0],
+    SnowInterception(Options, y, x, Dt, LocalVeg->Fract[0], Vf,
       LocalVeg->LAI[0], LocalVeg->MaxInt[0], Over->MaxSnowInt, Over->MDRatio,
       Over->SnowIntEff, UpperRa, LocalMet->AirDens,
       LocalMet->Eact, LocalMet->Lv, LocalRad, LocalMet->Press,
@@ -188,7 +194,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       Tsurf = LocalSnow->TSurf;
     else
       Tsurf = TGround;
-    LongwaveBalance(LocalVeg->OverStory, LocalVeg->Fract[0],
+    LongwaveBalance(LocalVeg->OverStory, Vf,
       LocalMet->Lin, LocalVeg->Tcanopy, Tsurf, Cu, LocalMet->Tair, LocalRad);
 
     /* An exposed understory intercepts the rain passing the overstory */
@@ -237,11 +243,10 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       SnowCond = 0.0;
       if (SnowDep > 0.0)
         SnowCond = SnowConductivity(SNOW_DENSITY) / SnowDep;
-      SnowIce = OldSwq - LocalSnow->PackWater - LocalSnow->SurfWater;
-      if (SnowIce > MAX_SURFACE_SWE)
-        SnowIce = MAX_SURFACE_SWE;
-      if (SnowIce < 0.0)
-        SnowIce = 0.0;
+      PackIce = OldSwq - LocalSnow->PackWater - LocalSnow->SurfWater;
+      if (PackIce < 0.0)
+        PackIce = 0.0;
+      SnowIce = (PackIce > MAX_SURFACE_SWE) ? MAX_SURFACE_SWE : PackIce;
       SnowTemp = (LocalMet->Tair < 0.0) ? LocalMet->Tair : 0.0;
       if (SnowIce + LocalPrecip->SnowFall > 0.0)
         SnowTemp = (SnowIce * OldSnowTSurf + LocalPrecip->SnowFall * SnowTemp) /
@@ -253,6 +258,18 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
       if (LocalSoil->TSurf < SnowTemp && SnowCond > 0.0) {
         SnowCap = CH_ICE * (SnowIce + LocalPrecip->SnowFall) / Dt;
         SnowCond = SnowCond * SnowCap / (SnowCond + SnowCap);
+      }
+      /* Heat entering the snow (ground warmer): at most what warms the
+         whole pack with the step's snowfall to 0 C and melts it over the
+         step, by limiting the conductance at the start-of-step temperatures
+         (a trace pack would otherwise draw the soil's heat into nothing);
+         the ground keeps the rest */
+      else if (LocalSoil->TSurf > SnowTemp && SnowCond > 0.0) {
+        SnowMax = (CH_ICE * (-(SnowIce + LocalPrecip->SnowFall) * SnowTemp -
+                             (PackIce - SnowIce) * LocalSnow->TPack) +
+                   LF * WATER_DENSITY * (PackIce + LocalPrecip->SnowFall)) / Dt;
+        if (SnowCond * (LocalSoil->TSurf - SnowTemp) > SnowMax)
+          SnowCond = SnowMax / (LocalSoil->TSurf - SnowTemp);
       }
       QSnowGround = GroundEnergyBalance(y, x, Dt, LocalMet, SType, LocalSoil, TRUE,
                                         SnowTemp, SnowCond, 0.f, 0.f, 0.f, 0.f, 0.f);
@@ -313,7 +330,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
        above the remaining snow) */
     Tsurf = LocalSnow->TSurf;
     Cu = (SnowDepth(LocalSnow->Swq) <= BuryDepth) ? Fu * (1 - LocalVeg->TauU) : 0.0;
-    LongwaveBalance(LocalVeg->OverStory, LocalVeg->Fract[0],
+    LongwaveBalance(LocalVeg->OverStory, Vf,
       LocalMet->Lin, LocalVeg->Tcanopy, Tsurf, Cu, LocalMet->Tair,
       LocalRad);
   }
@@ -367,7 +384,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   if (LocalVeg->OverStory == TRUE) {
     Rp = VISFRACT * LocalMet->Sin;
     NetRadiation = LocalRad->NetShort[0] +
-      LocalRad->LongIn[0] - 2 * LocalVeg->Fract[0] * LocalRad->LongOut[0];
+      LocalRad->LongIn[0] - 2 * Vf * LocalRad->LongOut[0];
     LocalRad->NetRadiation[0] = NetRadiation;
     Canopy.TwoLeaf = TRUE;
     Canopy.SinAlt = SineSolarAltitude;

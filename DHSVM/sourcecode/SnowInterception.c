@@ -20,6 +20,8 @@ int y                  - Row counter
 int x                  - Column counter
 int Dt                 - Model timestep (seconds)
 float F                - Fractional coverage
+float Vf               - Fraction of the cell opaque to longwave by the canopy,
+                         F (1 - Taud) (OverstoryViewFactor())
 float LAI              - Leaf Area Index
 float MaxInt           - Maximum rainfall interception storage (m)
 float BaseRa           - Aerodynamic resistance (uncorrected for
@@ -65,7 +67,7 @@ disregarded.  Rain water CAN be intercepted by lower canopy
 layers (similar to InterceptionStorage()).
 Of course:  NO vegetation -> NO interception
 *****************************************************************************/
-void SnowInterception(OPTIONSTRUCT *Options, int y, int x, int Dt, float F,
+void SnowInterception(OPTIONSTRUCT *Options, int y, int x, int Dt, float F, float Vf,
   float LAI, float MaxInt, float MaxSnowIntCap, float MDRatio,
   float SnowIntEff, float Ra, float AirDens, float EactAir,
   float Lv, PIXRAD *LocalRad, float Press, float Tair,
@@ -192,7 +194,7 @@ void SnowInterception(OPTIONSTRUCT *Options, int y, int x, int Dt, float F,
   Tmp = *Tcanopy + 273.15;
   LongOut = STEFAN * (Tmp * Tmp * Tmp * Tmp);
 
-  NetRadiation = LocalRad->NetShort[0] + LocalRad->LongIn[0] - 2 * F*LongOut;
+  NetRadiation = LocalRad->NetShort[0] + LocalRad->LongIn[0] - 2 * Vf * LongOut;
   NetRadiation /= F;
 
   /* Calculate the vapor mass flux between the canopy and the surrounding air mass

@@ -50,6 +50,8 @@ void LongwaveBalance(unsigned char OverStory,
 			   float F, float Ld, float Tcanopy, float Tsurf,
                float Cu, float Tair, PIXRAD *LocalRad);
 
+float OverstoryViewFactor(VEGPIX *LocalVeg);
+
 void NoSensibleHeatFlux(int Dt, PIXMET *LocalMet, float ETot, SOILPIX *LocalSoil);
 
 float GroundEnergyBalance(int y, int x, int Dt, PIXMET *LocalMet, SOILTABLE *SType,

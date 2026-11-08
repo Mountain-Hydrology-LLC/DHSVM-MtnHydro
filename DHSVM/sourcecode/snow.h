@@ -8,7 +8,7 @@
 void MassRelease(float *InterceptedSnow, float *TempInterceptionStorage,
 		 float *ReleasedMass, float *Drip, float MDRatio);
 
-void SnowInterception(OPTIONSTRUCT *Options, int y, int x, int Dt, float F,
+void SnowInterception(OPTIONSTRUCT *Options, int y, int x, int Dt, float F, float Vf,
               float LAI, float MaxInt, float MaxSnowIntCap,
               float MDRatio, float SnowIntEff, float Ra, float AirDens,
               float EactAir, float Lv, PIXRAD * LocalRad, float Press,

@@ -70,6 +70,9 @@ Reference:
        - The understory is at the air temperature and transmits the
          shortwave with its transmittance of the month; it is opaque to
          longwave over the fraction Cu
+       - The overstory is opaque to longwave over F (1 - Taud), its cover
+         times one minus its diffuse transmittance (the longwave view
+         factor, OverstoryViewFactor())
        - There are at most two vegetation layers
 
  *****************************************************************************/
@@ -128,13 +131,30 @@ void RadiationBalance(OPTIONSTRUCT *Options,
     Tsurf = TGround;
 
   /* Calculate longwave radiation balance */
-  LongwaveBalance(OverStory, F, Ld, Tcanopy, Tsurf, Cu, Tair, LocalRad);
+  LongwaveBalance(OverStory, OverstoryViewFactor(LocalVeg), Ld, Tcanopy, Tsurf, Cu,
+    Tair, LocalRad);
   
   LocalRad->PixelLongIn = Ld;
 
   // Input raw (downward) shortwave radiation without topo shading 
   LocalRad->ObsShortIn = VIC_Rs;
 
+}
+
+/*****************************************************************************
+  OverstoryViewFactor()
+
+  Fraction of the cell opaque to longwave by the overstory: its cover F
+  times one minus its diffuse transmittance Taud of the day (SetCellLAI),
+  the hemispherical integral of the beam transmittance also used for the
+  diffuse shortwave. The sky reaches the lower surface through the gaps of
+  the crowns. 0 without an overstory.
+*****************************************************************************/
+float OverstoryViewFactor(VEGPIX *LocalVeg)
+{
+  if (LocalVeg->OverStory != TRUE)
+    return 0.0;
+  return LocalVeg->Fract[0] * (1 - LocalVeg->Taud);
 }
 
 /************************************************************************************************
@@ -146,7 +166,8 @@ void RadiationBalance(OPTIONSTRUCT *Options,
   Required     :
     unsigned char OverStory
                      - Flag to indicate presence/absence of overstory
-    float F          - Fraction of pixel covered by top vegetation layer
+    float F          - Fraction of pixel opaque to longwave by the top
+                       vegetation layer (OverstoryViewFactor())
     float Ld         - Downward (incoming) longwave radiation (W/m2)
     float Tcanopy    - Canopy temperature (C)
     float Tsurf      - Surface temperature of the ground (soil or snow) (C)
