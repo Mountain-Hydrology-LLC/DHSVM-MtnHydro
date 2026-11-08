@@ -42,15 +42,17 @@ enum SNAPSHOTSLOT {
   SNAP_PRECIPSTART, SNAP_RUNOFF, SNAP_STARTRUNOFF, SNAP_DETENTION,
   SNAP_LAKEOUTFLOW, SNAP_SUMPRECIP, SNAP_SNOWACCUM, SNAP_SNOWMELT,
   SNAP_MAXSWE, SNAP_MAXSWEDATE, SNAP_MELTOUTDATE, SNAP_DESORPTIONACC,
-  SNAP_TACCLIM, SNAP_TGROWTH
+  SNAP_TACCLIM, SNAP_TGROWTH, SNAP_TNODE, SNAP_ICENODE,
+  SNAP_SOILTSURF
 };
 
 typedef struct {
   int Slot;			/* SNAPSHOTSLOT */
-  int Sub;			/* canopy (0 overstory, 1 understory) or soil layer */
+  int Sub;			/* canopy (0 overstory, 1 understory), soil layer or node */
 } SNAPLAYER;
 
-static int SnapshotLayers(int L, SNAPLAYER **Layers, char (**Names)[MAP_NAMESIZE]);
+static int SnapshotLayers(int L, int SoilFreezing, SNAPLAYER **Layers,
+                          char (**Names)[MAP_NAMESIZE]);
 static int CellHasLayer(SNAPLAYER *Layer, int y, int x, TOPOPIX **TopoMap,
                         VEGPIX **VegMap, LAKETABLE *LType);
 static float GetLayerValue(SNAPLAYER *Layer, int y, int x, TOPOPIX **TopoMap,
@@ -94,7 +96,9 @@ int CanopyIndex(VEGPIX *Cell, int Canopy)
   SnapshotLayers()
 
   The layers of a snapshot map in file order, with their names; L is the
-  number of root zone layers. Returns the number of layers (37 + 2 L).
+  number of root zone layers. Returns the number of layers: 37 + 2 L, and
+  with SoilFreezing 2 SOIL_NODES + 1 more (the node temperatures, the node
+  ice, the soil surface temperature).
 *****************************************************************************/
 static void AddLayer(SNAPLAYER *Layers, char (*Names)[MAP_NAMESIZE], int *n,
                      int Slot, int Sub, const char *Name)
@@ -105,10 +109,11 @@ static void AddLayer(SNAPLAYER *Layers, char (*Names)[MAP_NAMESIZE], int *n,
   (*n)++;
 }
 
-static int SnapshotLayers(int L, SNAPLAYER **Layers, char (**Names)[MAP_NAMESIZE])
+static int SnapshotLayers(int L, int SoilFreezing, SNAPLAYER **Layers,
+                          char (**Names)[MAP_NAMESIZE])
 {
   char Name[MAP_NAMESIZE];
-  int NLayers = 37 + 2 * L;
+  int NLayers = 37 + 2 * L + (SoilFreezing ? 2 * SOIL_NODES + 1 : 0);
   int n = 0;
   int l;
 
@@ -161,6 +166,17 @@ static int SnapshotLayers(int L, SNAPLAYER **Layers, char (**Names)[MAP_NAMESIZE
   AddLayer(*Layers, *Names, &n, SNAP_DESORPTIONACC, 0, "Soil.DesorptionAccumulated");
   AddLayer(*Layers, *Names, &n, SNAP_TACCLIM, 0, "Canopy.AcclimationTemperature");
   AddLayer(*Layers, *Names, &n, SNAP_TGROWTH, 0, "Canopy.GrowthTemperature");
+  if (SoilFreezing) {
+    for (l = 0; l < SOIL_NODES; l++) {
+      snprintf(Name, sizeof(Name), "Soil.NodeTemperature.%d", l + 1);
+      AddLayer(*Layers, *Names, &n, SNAP_TNODE, l, Name);
+    }
+    for (l = 0; l < SOIL_NODES; l++) {
+      snprintf(Name, sizeof(Name), "Soil.NodeIce.%d", l + 1);
+      AddLayer(*Layers, *Names, &n, SNAP_ICENODE, l, Name);
+    }
+    AddLayer(*Layers, *Names, &n, SNAP_SOILTSURF, 0, "Soil.SurfaceTemperature");
+  }
 
   return n;
 }
@@ -240,6 +256,9 @@ static float GetLayerValue(SNAPLAYER *Layer, int y, int x, TOPOPIX **TopoMap,
   case SNAP_DESORPTIONACC: return Soil->DesorptionAcc;
   case SNAP_TACCLIM: return VegMap[y][x].TAcclim;
   case SNAP_TGROWTH: return VegMap[y][x].TGrowth;
+  case SNAP_TNODE: return Soil->TNode[Layer->Sub];
+  case SNAP_ICENODE: return Soil->IceNode[Layer->Sub];
+  case SNAP_SOILTSURF: return Soil->TSurf;
   default:
     return NA;
   }
@@ -301,6 +320,9 @@ static void SetLayerValue(SNAPLAYER *Layer, int y, int x, float Value,
   case SNAP_DESORPTIONACC: Soil->DesorptionAcc = Value; break;
   case SNAP_TACCLIM: VegMap[y][x].TAcclim = Value; break;
   case SNAP_TGROWTH: VegMap[y][x].TGrowth = Value; break;
+  case SNAP_TNODE: Soil->TNode[Layer->Sub] = Value; break;
+  case SNAP_ICENODE: Soil->IceNode[Layer->Sub] = Value; break;
+  case SNAP_SOILTSURF: Soil->TSurf = Value; break;
   default:
     break;
   }
@@ -311,7 +333,8 @@ static void SetLayerValue(SNAPLAYER *Layer, int y, int x, float Value,
 
   Writes the snapshot valid at instant Valid into directory Path
 *****************************************************************************/
-void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, TOPOPIX **TopoMap,
+void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, int SoilFreezing,
+                     TOPOPIX **TopoMap,
                      PRECIPPIX **PrecipMap, SNOWPIX **SnowMap, VEGPIX **VegMap,
                      SOILPIX **SoilMap, CHANNEL *ChannelData,
                      LAKETABLE *LType)
@@ -330,7 +353,7 @@ void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, TOPOPIX **TopoMap,
     Message("Storing model state\n");
 
   /* Cell values */
-  NLayers = SnapshotLayers(Map->SoilLayers, &Layers, &Names);
+  NLayers = SnapshotLayers(Map->SoilLayers, SoilFreezing, &Layers, &Names);
   if (!(Array = (float *) calloc(Map->NY * Map->NX, sizeof(float))))
     ReportError("StoreModelState", 1);
   SPrintIsoDate(Valid, Time);
@@ -378,7 +401,7 @@ void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, TOPOPIX **TopoMap,
   the channel segments and the channel cells. Every file must match the
   model's grid, mask, classes and channel network.
 *****************************************************************************/
-void ReadModelState(char *Path, DATE *Start, int Dt, MAPSIZE *Map,
+void ReadModelState(char *Path, DATE *Start, int Dt, MAPSIZE *Map, int SoilFreezing,
                     TOPOPIX **TopoMap, PRECIPPIX **PrecipMap, SNOWPIX **SnowMap,
                     VEGPIX **VegMap, SOILPIX **SoilMap,
                     CHANNEL *ChannelData, LAKETABLE *LType)
@@ -413,7 +436,7 @@ void ReadModelState(char *Path, DATE *Start, int Dt, MAPSIZE *Map,
   }
 
   /* Cell values */
-  NLayers = SnapshotLayers(Map->SoilLayers, &Layers, &Names);
+  NLayers = SnapshotLayers(Map->SoilLayers, SoilFreezing, &Layers, &Names);
   CheckMap(&File, FileName[0], "State", NC_FLOAT, "snapshot", NLayers, Names, Time, Map, 112);
   if (!(Array = (float *) calloc(Map->NY * Map->NX, sizeof(float))))
     ReportError("ReadModelState", 1);

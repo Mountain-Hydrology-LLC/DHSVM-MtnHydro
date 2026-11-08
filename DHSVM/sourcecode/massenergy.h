@@ -52,10 +52,15 @@ void LongwaveBalance(unsigned char OverStory,
 
 void NoSensibleHeatFlux(int Dt, PIXMET *LocalMet, float ETot, SOILPIX *LocalSoil);
 
+float GroundEnergyBalance(int y, int x, int Dt, PIXMET *LocalMet, SOILTABLE *SType,
+                          SOILPIX *Soil, int Snow, float SnowTemp, float SnowCond,
+                          float NetRadGround, float LongOutGround, float LowerRa,
+                          float LowerWind, float GroundEvap);
+
 void RadiationBalance(OPTIONSTRUCT *Options,
               int Overstory, float FuR, float Cu,
               float SineSolarAltitude, float VICRs,
-              float Rs, float Rsb, float Rsd, float Ld, float Tair, float Tcanopy,
+              float Rs, float Rsb, float Rsd, float Ld, float Tair, float TGround, float Tcanopy,
               float SoilAlbedo, OVERTABLE *Over, UNDERTABLE *Under, SNOWPIX *LocalSnow,
               PIXRAD *LocalRad, VEGPIX *LocalVeg);
 

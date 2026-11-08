@@ -383,6 +383,10 @@ static void InitOptions(LISTPTR Input, OPTIONSTRUCT *Options)
      photosynthesis and stomata of Medlyn */
   Options->StomatalScheme =
     (ConfigChoice(Input, "OPTIONS", "Stomatal Scheme", Stomatal, 2) == 0) ? JARVIS : MEDLYN;
+
+  /* Soil heat conduction with frozen soil and the ground energy balance */
+  RequireConfigValue(Input, "OPTIONS", "Soil Freezing", Value);
+  Options->SoilFreezing = ConfigBool("OPTIONS", "Soil Freezing", Value);
 }
 
 /*****************************************************************************
@@ -562,6 +566,7 @@ static void InitParameters(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map)
   MIN_INTERCEPTION_STORAGE = Parameter(Input, "Min Intercepted Snow");
   MIN_SNOW_RESET_ALBEDO = Parameter(Input, "Min Albedo Reset Snowfall");
   MAX_SURFACE_SWE = Parameter(Input, "Max Surface Snow Layer Depth");
+  SNOW_DENSITY = Parameter(Input, "Snow Density");
 
   /* Station interpolation: maximum distance (m), used in cells */
   Options->MaxInterpDistance = Parameter(Input, "Max Interpolation Distance");
@@ -600,6 +605,8 @@ void PrintRunSettings(OPTIONSTRUCT *Options)
   if (Options->WindScale)
     Message("Wind speed scaled by the Met.WindScale map\n");
   Message("Stomatal scheme %s\n", (Options->StomatalScheme == MEDLYN) ? "MEDLYN" : "JARVIS");
+  if (Options->SoilFreezing)
+    Message("Soil freezing: %d soil temperature nodes to %.1f m\n", SOIL_NODES, SOIL_DAMPING_DEPTH);
   for (m = 0; m < NCLASSMAPS; m++) {
     if (Options->FromTable[m])
       Message("%s formed from the %s (%s%s)\n", ClassMaps[m].Name, ClassMaps[m].Table,

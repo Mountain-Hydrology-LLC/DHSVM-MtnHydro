@@ -12,7 +12,7 @@ void AdjustStorage(int NSoilLayers, float TotalDepth, float *RootDepth,
 
 float CalcAvailableWater(int NRootLayers, float TotalDepth, float *RootDepth,
 			 float *Moisture, float *FCap, float *Moist, float TableDepth,
-			 float *Adjust);
+			 float *Adjust, float *Ice);
 
 float CalcTotalWater(int NSoilLayers, float TotalDepth, float *RootDepth,
 		     float *Moist, float *Adjust);
@@ -24,7 +24,7 @@ void CutBankGeometry(int i, float RootDepth, float TopZone, float BankHeight,
 void DistributeSatflow(int Dt, float DX, float DY, float SatFlow,
                        int NSoilLayers, float TotalDepth, float *RootDepth,
                        float *Porosity, float *FCap, float *Adjust,
-                       float *TableDepth, float *Runoff, float *Moist);
+                       float *TableDepth, float *Runoff, float *Moist, float *Ice);
 
 void UnsaturatedFlow(OPTIONSTRUCT *Options, int Dt, float DX, float DY, float Infiltration,
                      int NSoilLayers,

@@ -215,6 +215,7 @@ typedef struct {
   float PrismPrecip[12];		  /* Precipitation normals: precipitation pattern map value at the station for each month */
   float SnowPattern;		      /* Snow pattern average for each station - after re-weighting with precip pattern */
   float SnowPatternBase;		  /* Snow normal: snow pattern map value at the station */
+  float MeanAirTemp;		      /* Mean annual air temperature at the station (C, SoilFreezing) */
   FILES MetFile;				      /* File with observations */
   int Column[NMETCOLUMNS];	  /* Field of Time and of each value in a record */
   int NFields;				        /* Fields of a record */
@@ -300,6 +301,7 @@ typedef struct {
   int UseKsatAnisotropy;/* Vertical Ksat from lateral Ksat and anisotropy (TRUE) or default table (FALSE) */
   int Infiltration;     /* Specifies static or dynamic maximum infiltration rate */
   int StomatalScheme;   /* Canopy conductance: JARVIS or MEDLYN */
+  int SoilFreezing;     /* TRUE: soil heat conduction with frozen soil and the ground energy balance */
   int Prism;					  /* Precipitation Pattern: if TRUE, the monthly precipitation pattern map and the
                            station normals are used to interpolate precipitation */
   int SnowPattern;		  /* If TRUE, user supplied snow map will be used to redistribute precipitation */
@@ -453,8 +455,6 @@ typedef struct {
   float TSurf;				/* Temperature of snow pack surface layer */
   float Albedo;				/* Albedo of snow pack */
   float AlbedoGround; /* Albedo of the ground or understory under the snowpack */
-  float Depth;				/* Snow depth; Does not appear to be calculated
-							   or used anywhere */
   float VaporMassFlux;		/* Vapor mass flux to/from snow pack,(m/timestep). 
                                A negative value indicates flux from snow -- sublimiation */
   float CanopyVaporMassFlux;/* Vapor mass flux to/from intercepted snow in the canopy (m/timestep) */
@@ -526,6 +526,16 @@ typedef struct {
   float *Press;          /* Brooks-Corey bubbling pressure (m) - each layer */
   float *LayerThickness; /* Thickness of each root zone layer (m) */
   float TotalThickness;  /* Sum of LayerThickness from 0.0 in layer order (m) */
+  float *TNode;          /* Temperature of each soil temperature node (C, SoilFreezing) */
+  float *IceNode;        /* Ice of each soil temperature node (m3/m3, SoilFreezing) */
+  float *Ice;            /* Ice in each layer and the deep layer (m3/m3), from the nodes */
+  float *TLayer;         /* Temperature of each layer and the deep layer (C), from the nodes */
+  float FrostDepth;      /* Depth of the deepest frozen zone reaching into the soil (m) */
+  int NFrost;            /* Number of frozen zones reaching into the soil */
+  float *FrostTop;       /* Top of each of them (m), shallowest first (SOIL_FROST_ZONES) */
+  float *FrostBottom;    /* Bottom of each of them (m), at most the soil depth */
+  float TBot;            /* Bottom boundary temperature of the nodes (C): the stations'
+                            mean air temperature at the cell */
 } SOILPIX;
 
 typedef struct {
@@ -546,6 +556,8 @@ typedef struct {
   float MaxInfiltrationRate; /* Maximum infiltration rate for upper layer (m/s) */
   float DeepFlux; /* Net groundwater flux upwelling (+) or downwelling (-) (m/yr as read; m per time step after ApplyTableParameters) */
   float G_Infilt;                /* Mean capillary drive for dynamic maximum infiltration rate (m)   */
+  float *Quartz;			/* Quartz fraction of the mineral solids, each layer and the deep layer (SoilFreezing) */
+  float *Organic;			/* Organic fraction of the solids by volume, each layer and the deep layer (SoilFreezing) */
 } SOILTABLE;
 
 struct LAKETABLE {
@@ -743,6 +755,7 @@ typedef struct {
   NETSTRUCT **Network;
   Channel *Streams;		/* Channel segments in segment table order */
   int Dt;			/* Time step (s) */
+  int SoilFreezing;		/* Options->SoilFreezing */
   int NumLakes;			/* Lakes of the lake table (0 without Lake Dynamics) */
   float *LakeLevel;		/* Level of each lake: the mean surface water of its cells (m), set by Aggregate */
   int *LakeCells;		/* Mask cells of each lake, counted by Aggregate */

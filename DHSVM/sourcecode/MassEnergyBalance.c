@@ -47,6 +47,8 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   float B;                  /* Capillary drive and soil saturation deficit used
                                in dynamic infiltration calculation*/
   float MaxInfiltration;	/* Maximum infiltration into the top soil layer (m) */
+  float FreePore;           /* Pore space of the top layer free of water and ice (m) */
+  int   l;                  /* Soil layer */
   float PercArea;           /* Surface area of percolation corrected for
                                channel area, divided by the grid cell area (0-1)  */
 #endif
@@ -60,6 +62,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   float SnowRa;				/* Aerodynamic resistance for snow */
   float SnowWind;		    /* Wind 2 m above snow */
   float Tsurf;				/* Surface temperature used in LongwaveBalance (C) */
+  float TGround;			/* Temperature of the snow-free ground (C) */
   int   NVegLActual;		/* Number of vegetation layers above snow */
   float RainOverflow[MAXVEGLAYERS] = {0.0, 0.0}; /* Rain each layer's full interception storage passed on (m) */
   float DryChannelEvap;
@@ -72,7 +75,17 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
                                shortwave of the step (0 with the understory buried) */
   float Cu;                 /* Fraction of the lower surface opaque to longwave by the
                                understory (0 with the understory buried) */
-  float BurySwe;            /* Snow water equivalent above which the understory is buried (m) */
+  float BuryDepth;          /* Snow depth above which the understory is buried (m) */
+  float QSnowGround = 0.0;  /* Heat flux from the ground into the snow (W/m2) */
+  int SnowStep = FALSE;     /* TRUE if the snow routine ran this step */
+#ifndef NO_SOIL
+  float OldSwq;             /* Snow water equivalent before SnowMelt (m) */
+  float SnowCond;           /* Thermal conductance of the snow to the ground (W/m2/K) */
+  float SnowDep;            /* Depth of the pack with the step's snowfall (m) */
+  float SnowIce;            /* Ice of the snow's surface layer (m) */
+  float SnowTemp;           /* and its temperature with the step's snowfall (C) */
+  float SnowCap;            /* Heat capacity of that layer over the step (W/m2/K) */
+#endif
   int   Exposed;            /* TRUE if the understory is above the snow at the start of the step,
                                with the step's snowfall */
   float NetShortL;          /* Net shortwave of the lower surface (W/m2) */
@@ -94,25 +107,26 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     SType->NLayers, LocalSoil->Depth, LocalSoil->LayerThickness,
     LocalSoil->Porosity, LocalSoil->FCap,
     LocalNetwork->Adjust, &(LocalSoil->TableDepth),
-    &(LocalSoil->IExcess), LocalSoil->Moist);
+    &(LocalSoil->IExcess), LocalSoil->Moist,
+    Options->SoilFreezing ? LocalSoil->Ice : NULL);
   
   /* Temperature memories of the canopy photosynthesis */
   PhotoTemperatureMemory(LocalMet->Tair, (float) Dt, &(LocalVeg->TAcclim), &(LocalVeg->TGrowth));
 
   /* The understory covers the fraction Fu of the cell and is buried when the
-     snow water equivalent exceeds SNOW_DENSITY times its height. The lower
-     surface at the start of the step (with the step's snowfall): the
+     snow depth exceeds its height (the pack with the step's snowfall, at
+     the snow density). The lower surface at the start of the step: the
      understory over FuR above the ground (soil or snow), transmitting the
      shortwave with TauU; it is opaque to longwave over Cu */
   NVeg = LocalVeg->NVegLayers;
   Lower = (LocalVeg->OverStory == TRUE) ? 1 : 0;
   Fu = 0.0;
-  BurySwe = 0.0;
+  BuryDepth = 0.0;
   Exposed = FALSE;
   if (LocalVeg->UnderStory == TRUE) {
     Fu = LocalVeg->UnderstoryCover;
-    BurySwe = SNOW_DENSITY * LocalVeg->Height[Lower];
-    Exposed = (LocalSnow->Swq + LocalPrecip->SnowFall <= BurySwe) ? TRUE : FALSE;
+    BuryDepth = LocalVeg->Height[Lower];
+    Exposed = (SnowDepth(LocalSnow->Swq + LocalPrecip->SnowFall) <= BuryDepth) ? TRUE : FALSE;
   }
   FuR = (LocalSnow->HasSnow == TRUE && Exposed != TRUE) ? 0.0 : Fu;
   Cu = FuR * (1 - LocalVeg->TauU);
@@ -127,11 +141,19 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   LocalVeg->MeltEnergy = 0.0;
   LocalVeg->MoistureFlux = 0.0;
 
+  /* The snow-free ground: at the air temperature, or with SoilFreezing at
+     the soil surface temperature of the last step */
+  TGround = LocalMet->Tair;
+#ifndef NO_SOIL
+  if (Options->SoilFreezing)
+    TGround = LocalSoil->TSurf;
+#endif
+
   /* calculate the radiation balance for pixels */
   RadiationBalance(Options,
     LocalVeg->OverStory, FuR, Cu, SineSolarAltitude,
     LocalMet->VICSin, LocalMet->Sin, LocalMet->SinBeam,
-    LocalMet->SinDiffuse, LocalMet->Lin, LocalMet->Tair, LocalVeg->Tcanopy,
+    LocalMet->SinDiffuse, LocalMet->Lin, LocalMet->Tair, TGround, LocalVeg->Tcanopy,
     SType->Albedo, Over, Under, LocalSnow, LocalRad, LocalVeg);
 
   /* calculate the actual aerodynamic resistances and wind speeds */
@@ -165,7 +187,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     if (LocalSnow->HasSnow == TRUE)
       Tsurf = LocalSnow->TSurf;
     else
-      Tsurf = LocalMet->Tair;
+      Tsurf = TGround;
     LongwaveBalance(LocalVeg->OverStory, LocalVeg->Fract[0],
       LocalMet->Lin, LocalVeg->Tcanopy, Tsurf, Cu, LocalMet->Tair, LocalRad);
 
@@ -184,7 +206,8 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   }
 
   /* if snow is present, simulate the snow pack dynamics */
-  if (LocalSnow->HasSnow || LocalPrecip->SnowFall > 0.0) {
+  SnowStep = (LocalSnow->HasSnow || LocalPrecip->SnowFall > 0.0);
+  if (SnowStep) {
     /* Under an exposed understory the snow gets the ground's shortwave and
        longwave; otherwise all of the lower surface's */
     if (Exposed == TRUE) {
@@ -200,6 +223,41 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     SnowRa = LocalVeg->RaSnow / LocalMet->Wind;
 
     OldSnowTSurf = LocalSnow->TSurf;
+
+    /* SoilFreezing: the ground's temperature solve with the snow above it
+       (implicit in the ground), before the snow's: the snow conducts
+       through the depth of the pack with the step's snowfall at the snow
+       density, at the temperature of its surface layer with the snowfall
+       at the start of the step, and takes the flux the ground gives up as
+       fixed */
+#ifndef NO_SOIL
+    OldSwq = LocalSnow->Swq;
+    if (Options->SoilFreezing) {
+      SnowDep = SnowDepth(OldSwq + LocalPrecip->SnowFall);
+      SnowCond = 0.0;
+      if (SnowDep > 0.0)
+        SnowCond = SnowConductivity(SNOW_DENSITY) / SnowDep;
+      SnowIce = OldSwq - LocalSnow->PackWater - LocalSnow->SurfWater;
+      if (SnowIce > MAX_SURFACE_SWE)
+        SnowIce = MAX_SURFACE_SWE;
+      if (SnowIce < 0.0)
+        SnowIce = 0.0;
+      SnowTemp = (LocalMet->Tair < 0.0) ? LocalMet->Tair : 0.0;
+      if (SnowIce + LocalPrecip->SnowFall > 0.0)
+        SnowTemp = (SnowIce * OldSnowTSurf + LocalPrecip->SnowFall * SnowTemp) /
+          (SnowIce + LocalPrecip->SnowFall);
+      /* Heat leaving the snow (ground colder): the conductance in series
+         with the surface layer's heat capacity over the step, so that the
+         snow cools at most to the ground's temperature (a thin new pack
+         has a huge conductance and almost no heat capacity) */
+      if (LocalSoil->TSurf < SnowTemp && SnowCond > 0.0) {
+        SnowCap = CH_ICE * (SnowIce + LocalPrecip->SnowFall) / Dt;
+        SnowCond = SnowCond * SnowCap / (SnowCond + SnowCap);
+      }
+      QSnowGround = GroundEnergyBalance(y, x, Dt, LocalMet, SType, LocalSoil, TRUE,
+                                        SnowTemp, SnowCond, 0.f, 0.f, 0.f, 0.f, 0.f);
+    }
+#endif
     LocalSnow->Outflow =
       SnowMelt(y, x, Dt, 2. + Z0_SNOW, 0.f, Z0_SNOW, SnowRa, LocalMet->AirDens,
         LocalMet->Eact, LocalMet->Lv, SnowNetShort, SnowLongIn,
@@ -208,7 +266,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
         &(LocalSnow->PackWater), &(LocalSnow->SurfWater),
         &(LocalSnow->Swq), &(LocalSnow->VaporMassFlux),
         &(LocalSnow->TPack), &(LocalSnow->TSurf), &(LocalVeg->MeltEnergy),
-        LocalSnow->MeltScale);
+        LocalSnow->MeltScale, QSnowGround);
 
     /* Calculate the terms of the snow energy balance.  This is similar to the
     code in SnowPackEnergyBalance.c */
@@ -254,7 +312,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
        can recalculate the longwave balance (with the understory if it is
        above the remaining snow) */
     Tsurf = LocalSnow->TSurf;
-    Cu = (LocalSnow->Swq <= BurySwe) ? Fu * (1 - LocalVeg->TauU) : 0.0;
+    Cu = (SnowDepth(LocalSnow->Swq) <= BuryDepth) ? Fu * (1 - LocalVeg->TauU) : 0.0;
     LongwaveBalance(LocalVeg->OverStory, LocalVeg->Fract[0],
       LocalMet->Lin, LocalVeg->Tcanopy, Tsurf, Cu, LocalMet->Tair,
       LocalRad);
@@ -280,6 +338,15 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
 #endif
 
 #ifndef NO_ET
+#ifndef NO_SOIL
+  /* SoilFreezing: the evapotranspiration and the soil evaporation see the
+     liquid water of the layers; the ice goes back after them */
+  if (Options->SoilFreezing) {
+    for (l = 0; l <= SType->NLayers; l++)
+      LocalSoil->Moist[l] -= LocalSoil->Ice[l];
+  }
+#endif
+
   /* The stomatal scheme: under MEDLYN the kinetics of the cell and step
      (only the dark respiration without shortwave), the CO2 of the year and
      the cold acclimation */
@@ -330,7 +397,7 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
      takes the rest). The visible radiation: JARVIS the incident at the top
      of the understory, MEDLYN the absorbed per covered area; the demand
      above it per covered area */
-  if (LocalVeg->UnderStory == TRUE && LocalSnow->Swq <= BurySwe) {
+  if (LocalVeg->UnderStory == TRUE && SnowDepth(LocalSnow->Swq) <= BuryDepth) {
     Tmp = LocalMet->Tair + 273.15;
     LongOutU = STEFAN * (Tmp * Tmp * Tmp * Tmp);
     if (FuR > 0.0) {
@@ -463,6 +530,26 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
   }
   else
     LocalEvap->EvapChannel = 0.0;
+
+#ifndef NO_SOIL
+  if (Options->SoilFreezing) {
+    for (l = 0; l <= SType->NLayers; l++)
+      LocalSoil->Moist[l] += LocalSoil->Ice[l];
+  }
+#endif
+#endif
+
+#ifndef NO_SOIL
+  /* SoilFreezing, a step without the snow routine: the ground's temperature
+     solve with the radiation and sensible heat of the ground and the
+     evaporation of the step held fixed. In a step with the snow routine
+     (including the step the pack melts out) the ground was solved with the
+     snow above it. */
+  if (Options->SoilFreezing && !SnowStep)
+    GroundEnergyBalance(y, x, Dt, LocalMet, SType, LocalSoil, FALSE, 0.f, 0.f,
+                        NetRadGround, LocalRad->LongOutGround, LowerRa,
+                        (LocalVeg->OverStory == TRUE) ? LocalVeg->U[1] * LocalMet->Wind : UpperWind,
+                        LocalEvap->EvapSoil);
 #endif
 
   /* add the water that was not intercepted to the upper soil layer */
@@ -528,7 +615,18 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
 
   if (Infiltration > MaxInfiltration)
     Infiltration = MaxInfiltration;
-  
+
+  /* SoilFreezing: a top layer holding ice takes at most its pore space free
+     of water and ice; the rest stays on the surface */
+  if (Options->SoilFreezing && LocalSoil->Ice[0] > 0.0) {
+    FreePore = (LocalSoil->Porosity[0] - LocalSoil->Moist[0]) *
+      LocalSoil->LayerThickness[0] * LocalNetwork->Adjust[0];
+    if (FreePore < 0.0)
+      FreePore = 0.0;
+    if (Infiltration > FreePore)
+      Infiltration = FreePore;
+  }
+
   LocalSoil->IExcess = SurfaceWater - Infiltration;
 
   /* The infiltration rewets the top layer: it offsets the soil evaporation
@@ -561,5 +659,12 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     LocalSoil->InfiltAcc += Infiltration;
 #endif
 
-  NoSensibleHeatFlux(Dt, LocalMet, LocalVeg->MoistureFlux, LocalSoil);
+  /* The latent heat of the evapotranspiration; without SoilFreezing no
+     other surface terms */
+#ifndef NO_SOIL
+  if (Options->SoilFreezing)
+    LocalSoil->Qe = -(LocalMet->Lv * LocalVeg->MoistureFlux) / Dt * WATER_DENSITY;
+  else
+#endif
+    NoSensibleHeatFlux(Dt, LocalMet, LocalVeg->MoistureFlux, LocalSoil);
 }

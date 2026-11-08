@@ -41,6 +41,9 @@ Reference:
      float VIC_Rs       - Input 'observed' shortwave radiation in the forcing file
      float Ld           - Incoming longwave radiation (W/m2)
      float Tair         - Ambient air temperature (C)
+     float TGround      - Temperature of the snow-free ground (C): the air
+                          temperature, or with SoilFreezing the soil surface
+                          temperature of the last step
      float Tcanopy      - Canopy temperature from the previous timestep (C)
      float FuR          - Fraction of the lower surface covered by the
                           understory for the shortwave (0 without an
@@ -59,7 +62,7 @@ Reference:
      small change for the canopy surface temperature.
      The following assumptions are made:
        - No snow:
-         the soil temperature is the same as the air temperature
+         the soil surface is at TGround
        - Snow:
          soil temperature is the snow surface temperature
        - Canopy temperature is equal to the air temperature is there is no snow
@@ -74,7 +77,7 @@ void RadiationBalance(OPTIONSTRUCT *Options,
   int OverStory, float FuR, float Cu,
   float SineSolarAltitude, float VIC_Rs, float Rs,
   float Rsb, float Rsd, float Ld,
-  float Tair, float Tcanopy, float SoilAlbedo,
+  float Tair, float TGround, float Tcanopy, float SoilAlbedo,
   OVERTABLE *Over, UNDERTABLE *Under, SNOWPIX *LocalSnow, PIXRAD *LocalRad, VEGPIX *LocalVeg)
 {
   float F;			    /* Fraction of pixel covered by top canopy layer [0-1] */
@@ -122,7 +125,7 @@ void RadiationBalance(OPTIONSTRUCT *Options,
   if (LocalSnow->HasSnow == TRUE)
     Tsurf = LocalSnow->TSurf;
   else
-    Tsurf = Tair;
+    Tsurf = TGround;
 
   /* Calculate longwave radiation balance */
   LongwaveBalance(OverStory, F, Ld, Tcanopy, Tsurf, Cu, Tair, LocalRad);

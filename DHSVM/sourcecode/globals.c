@@ -45,3 +45,4 @@ float ALB_ACC_MIN;
 float ALB_MELT_MIN;
 float PRECIP_MULTIPLIER;        /* Precipitation multiplier */
 float MAX_SURFACE_SWE; 	       /* Maximum depth of the surface layer in snow water equivalent (m) */
+float SNOW_DENSITY;             /* Density of all snow (kg/m3) */

@@ -6,7 +6,7 @@
 /* Layer sets of the variables */
 enum LAYERSET {
   SET_NONE, SET_SOIL, SET_ROOT, SET_CANOPY, SET_CANOPYSOIL, SET_CANOPYROOT,
-  SET_MONTH, SET_AZIMUTH
+  SET_MONTH, SET_AZIMUTH, SET_NODE
 };
 
 /* Output kinds that accept a variable (bits) */

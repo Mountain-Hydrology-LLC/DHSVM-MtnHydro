@@ -19,8 +19,21 @@
 #define PI   3.14159265358979323846
 #define RADPHOUR    0.2617994   /* radians per hour: Earth's Rotation (2 PI rad/day) * (1 day/24 h) */
 #define RADPDEG     (PI/180.0)	/* radians per degree */
-#define SNOW_DENSITY 0.4		/* Snow density relative to water (snow depth = SWE / SNOW_DENSITY) */
-#define SOLARCON    1360.	    /* Solar constant (W/m^2) */
+#define SOIL_NODES 10			/* Soil temperature nodes, the surface to SOIL_DAMPING_DEPTH */
+#define SOIL_DAMPING_DEPTH 4.		/* Depth of the bottom soil temperature node (m) */
+#define SOIL_FROST_ZONES ((SOIL_NODES + 1) / 2)	/* Most separate frozen zones of the nodes */
+#define SOIL_PARTICLE_DENSITY 2685.	/* Density of the mineral soil solids (kg/m3) */
+#define SOIL_TKTRIP 273.16		/* Triple point of water (K), freezing point depression */
+#define SOIL_K_ICE 2.2			/* Thermal conductivity of ice in soil (W/(m C)) */
+#define SOIL_K_WATER 0.57		/* Thermal conductivity of water in soil (W/(m C)) */
+#define SOIL_KDRY_ORG 0.05		/* Dry thermal conductivity of organic solids (W/(m C)) */
+#define SOIL_KS_ORG 0.25		/* Thermal conductivity of organic solids (W/(m C)) */
+#define SOIL_CS_MIN 2.0e6		/* Volumetric heat capacity of mineral solids (J/(m3 C)) */
+#define SOIL_CS_ORG 2.7e6		/* Volumetric heat capacity of organic solids (J/(m3 C)) */
+#define SOIL_CS_WATER 4.2e6		/* Volumetric heat capacity of water in soil (J/(m3 C)) */
+#define SOIL_CS_ICE 1.9e6		/* Volumetric heat capacity of ice in soil (J/(m3 C)) */
+#define SOIL_CS_AIR 1.3e3		/* Volumetric heat capacity of air in soil (J/(m3 C)) */
+#define SOLARCON   1360.	    /* Solar constant (W/m^2) */
 #define STEFAN    (5.6696e-8)	/* Stefan-Boltzmann constant (W/(M^2*C^4) */
 #define VISFRACT    0.5		    /* part of shortwave that is in the visible range of the spectrum */
 #define VON_KARMAN  0.4		    /* Von Karman's constant */
@@ -77,4 +90,5 @@ extern float ALB_ACC_MIN;
 extern float ALB_MELT_MIN;
 extern float PRECIP_MULTIPLIER;        /* Precipitation multiplier */
 extern float MAX_SURFACE_SWE; 	       /* Maximum depth of the surface layer in snow water equivalent (m) */
+extern float SNOW_DENSITY;             /* Density of all snow (kg/m3) */
 #endif

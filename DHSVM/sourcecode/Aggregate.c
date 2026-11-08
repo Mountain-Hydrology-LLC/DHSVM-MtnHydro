@@ -21,6 +21,7 @@
 #include "output.h"
 #include "registry.h"
 #include "photosynthesis.h"
+#include "snow.h"
 
 static int Base[NVALUECODES];	/* First slot of a value code with means, -1 if none */
 static int IsSnowMean[NVALUECODES];	/* TRUE: mean over the cells with snow */
@@ -251,6 +252,7 @@ static void AddCell(AGGREGATE **Target, int NTarget, MODELVIEW *Model, int y, in
     for (t = 0; t < NTarget; t++)
       Target[t]->NSnow++;
     ADD(V_SNOW_ALBEDO, 0, Snow->Albedo);
+    ADD(V_SNOW_DEPTH, 0, SnowDepth(Snow->Swq));
     ADD(V_SNOW_DAYSSINCESNOWFALL, 0, Snow->LastSnow);
     ADD(V_SNOW_PACKLIQUID, 0, Snow->PackWater);
     ADD(V_SNOW_PACKTEMPERATURE, 0, Snow->TPack);
@@ -287,6 +289,15 @@ static void AddCell(AGGREGATE **Target, int NTarget, MODELVIEW *Model, int y, in
     DeepDepth += Soil->LayerThickness[i];
   }
   ADD(V_SOIL_MOISTURE, L, Soil->Moist[L]);
+  for (i = 0; i <= L; i++) {
+    ADD(V_SOIL_ICE, i, Soil->Ice[i]);
+    ADD(V_SOIL_TEMPERATURE, i, Soil->TLayer[i]);
+  }
+  ADD(V_SOIL_SURFACETEMPERATURE, 0, Soil->TSurf);
+  ADD(V_SOIL_FROSTDEPTH, 0, Soil->FrostDepth);
+  ADD(V_SOIL_FROSTTOP, 0, (Soil->NFrost > 0) ? Soil->FrostTop[0] : 0.0);
+  ADD(V_SOIL_GROUNDHEATFLUX, 0, Soil->Qg);
+  ADD(V_SOIL_SENSIBLEHEATFLUX, 0, Soil->Qs);
   Term = Soil->Moist[L] * (Soil->Depth - DeepDepth) * Network->Adjust[L];
   ADD(V_SOIL_WATER, 0, Term);
   ADD(V_SOIL_TABLEDEPTH, 0, Soil->TableDepth);

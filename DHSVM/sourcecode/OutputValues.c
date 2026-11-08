@@ -15,6 +15,7 @@
 #include "output.h"
 #include "registry.h"
 #include "photosynthesis.h"
+#include "snow.h"
 
 static const struct {
   const char *Name;
@@ -44,6 +45,7 @@ static const struct {
   {"Snow.SurfaceTemperature", V_SNOW_SURFACETEMPERATURE},
   {"Snow.ColdContent", V_SNOW_COLDCONTENT},
   {"Snow.Albedo", V_SNOW_ALBEDO},
+  {"Snow.Depth", V_SNOW_DEPTH},
   {"Snow.Vapor", V_SNOW_VAPOR},
   {"Snow.NetShortwave", V_SNOW_NETSHORTWAVE},
   {"Snow.NetLongwave", V_SNOW_NETLONGWAVE},
@@ -87,6 +89,15 @@ static const struct {
   {"Soil.Water", V_SOIL_WATER},
   {"Soil.DeepFlux", V_SOIL_DEEPFLUX},
   {"Soil.LatentHeat", V_SOIL_LATENTHEAT},
+  {"Soil.Ice", V_SOIL_ICE},
+  {"Soil.Temperature", V_SOIL_TEMPERATURE},
+  {"Soil.NodeTemperature", V_SOIL_NODETEMPERATURE},
+  {"Soil.NodeIce", V_SOIL_NODEICE},
+  {"Soil.SurfaceTemperature", V_SOIL_SURFACETEMPERATURE},
+  {"Soil.FrostDepth", V_SOIL_FROSTDEPTH},
+  {"Soil.FrostTop", V_SOIL_FROSTTOP},
+  {"Soil.GroundHeatFlux", V_SOIL_GROUNDHEATFLUX},
+  {"Soil.SensibleHeatFlux", V_SOIL_SENSIBLEHEATFLUX},
   {"Surface.Detention", V_SURFACE_DETENTION},
   {"Surface.Runoff", V_SURFACE_RUNOFF},
   {"Stream.Interception", V_STREAM_INTERCEPTION},
@@ -238,6 +249,7 @@ float CellValue(int Code, int Layer, MODELVIEW *Model, int y, int x, int *Has)
   case V_SNOW_SURFACETEMPERATURE: return Snow->TSurf;
   case V_SNOW_COLDCONTENT: return SnowColdContent(Snow);
   case V_SNOW_ALBEDO: return Snow->Albedo;
+  case V_SNOW_DEPTH: return SnowDepth(Snow->Swq);
   case V_SNOW_VAPOR: return Snow->VaporMassFlux;
   case V_SNOW_NETSHORTWAVE: return Snow->Qsw;
   case V_SNOW_NETLONGWAVE: return Snow->Qlw;
@@ -301,6 +313,15 @@ float CellValue(int Code, int Layer, MODELVIEW *Model, int y, int x, int *Has)
     return Value;
   case V_SOIL_DEEPFLUX: return Soil->DeepFlux;
   case V_SOIL_LATENTHEAT: return Soil->Qe;
+  case V_SOIL_ICE: return Soil->Ice[Layer];
+  case V_SOIL_TEMPERATURE: return Soil->TLayer[Layer];
+  case V_SOIL_NODETEMPERATURE: return Soil->TNode[Layer];
+  case V_SOIL_NODEICE: return Soil->IceNode[Layer];
+  case V_SOIL_SURFACETEMPERATURE: return Soil->TSurf;
+  case V_SOIL_FROSTDEPTH: return Soil->FrostDepth;
+  case V_SOIL_FROSTTOP: return (Soil->NFrost > 0) ? Soil->FrostTop[0] : 0.0;
+  case V_SOIL_GROUNDHEATFLUX: return Soil->Qg;
+  case V_SOIL_SENSIBLEHEATFLUX: return Soil->Qs;
   case V_SURFACE_DETENTION: return Soil->DetentionStorage;
   case V_SURFACE_RUNOFF: return Soil->Runoff;
   case V_STREAM_INTERCEPTION: return Soil->ChannelInt;

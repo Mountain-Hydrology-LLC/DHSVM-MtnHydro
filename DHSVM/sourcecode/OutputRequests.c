@@ -49,6 +49,13 @@ static const char *Unavailable(int Var, OPTIONSTRUCT *Options)
     return "Infiltration = DYNAMIC";
   if (strncmp(Name, "Lake.", 5) == 0 && !Options->LakeDynamics)
     return "Lake Dynamics = TRUE";
+  if ((strcmp(Name, "Soil.Ice") == 0 || strcmp(Name, "Soil.Temperature") == 0 ||
+       strcmp(Name, "Soil.NodeTemperature") == 0 || strcmp(Name, "Soil.NodeIce") == 0 ||
+       strcmp(Name, "Soil.SurfaceTemperature") == 0 || strcmp(Name, "Soil.FrostDepth") == 0 ||
+       strcmp(Name, "Soil.FrostTop") == 0 ||
+       strcmp(Name, "Soil.GroundHeatFlux") == 0 || strcmp(Name, "Soil.SensibleHeatFlux") == 0) &&
+      !Options->SoilFreezing)
+    return "Soil Freezing = TRUE";
   if ((strcmp(Name, "Canopy.Assimilation") == 0 || strcmp(Name, "Canopy.Acclimation") == 0) &&
       Options->StomatalScheme != MEDLYN)
     return "Stomatal Scheme = MEDLYN";

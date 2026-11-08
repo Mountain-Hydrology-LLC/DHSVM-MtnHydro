@@ -7,6 +7,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include "constants.h"
 #include "registry.h"
 
 static const REGISTRYROW Rows[] = {
@@ -62,6 +63,7 @@ static const REGISTRYROW Rows[] = {
   {"Snow.ColdContent", "-", "J/m2", "FLOAT", "cell", "Instant", "N", "SnowMean", "Basin Point Class Map", "N"},
   {"Snow.AccumulationSeason", "-", "-", "FLOAT", "cell", "Instant", "N", "-", "-", "Y"},
   {"Snow.Albedo", "-", "fraction", "FLOAT", "cell", "Instant", "N", "SnowMean", "Basin Point Class Map", "Y"},
+  {"Snow.Depth", "-", "m", "FLOAT", "cell", "Instant", "N", "SnowMean", "Basin Point Class Map", "N"},
   {"Snow.Vapor", "-", "m/step", "FLOAT", "cell", "Interval", "Y", "Mean", "Basin Point Class Map", "N"},
   {"Snow.NetShortwave", "-", "W/m2", "FLOAT", "cell", "Interval", "N", "SnowMean", "Basin Point Class Map", "N"},
   {"Snow.NetLongwave", "-", "W/m2", "FLOAT", "cell", "Interval", "N", "SnowMean", "Basin Point Class Map", "N"},
@@ -107,6 +109,15 @@ static const REGISTRYROW Rows[] = {
   {"Soil.Water", "-", "m", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "N"},
   {"Soil.DeepFlux", "-", "m/step", "FLOAT", "cell", "Interval", "Y", "Mean", "Basin Point Class Map", "N"},
   {"Soil.LatentHeat", "-", "W/m2", "FLOAT", "cell", "Interval", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.Ice", "Soil", "m3/m3", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.Temperature", "Soil", "C", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.NodeTemperature", "Node", "C", "FLOAT", "cell", "Instant", "N", "-", "Point Map", "Y"},
+  {"Soil.NodeIce", "Node", "m3/m3", "FLOAT", "cell", "Instant", "N", "-", "Point Map", "Y"},
+  {"Soil.SurfaceTemperature", "-", "C", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "Y"},
+  {"Soil.FrostDepth", "-", "m", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.FrostTop", "-", "m", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.GroundHeatFlux", "-", "W/m2", "FLOAT", "cell", "Interval", "N", "Mean", "Basin Point Class Map", "N"},
+  {"Soil.SensibleHeatFlux", "-", "W/m2", "FLOAT", "cell", "Interval", "N", "Mean", "Basin Point Class Map", "N"},
   {"Surface.Detention", "-", "m", "FLOAT", "cell", "Instant", "N", "Mean", "Basin Point Class Map", "Y"},
   {"Surface.Runoff", "-", "m", "FLOAT", "cell", "Instant", "N", "-", "Point Map", "Y"},
   {"Surface.RunoffStart", "-", "m", "FLOAT", "cell", "Instant", "N", "-", "-", "Y"},
@@ -197,6 +208,8 @@ int RegistryLayerSet(int Var)
     return SET_MONTH;
   if (strcmp(Set, "Azimuth") == 0)
     return SET_AZIMUTH;
+  if (strcmp(Set, "Node") == 0)
+    return SET_NODE;
   return SET_NONE;
 }
 
@@ -217,6 +230,8 @@ int RegistryLayerCount(int Var, int SoilLayers)
     return 12;
   case SET_AZIMUTH:
     return 36;
+  case SET_NODE:
+    return SOIL_NODES;
   default:
     return 1;
   }
@@ -227,7 +242,7 @@ int RegistryLayerCount(int Var, int SoilLayers)
 
   Full name of layer Layer (0-based) of a variable: the name itself without
   layers, else <Name>.<token> (1..L, Deep; Overstory, Understory, Soil;
-  Overstory_1..L, Understory_1..L; Jan..Dec; Az000..Az350)
+  Overstory_1..L, Understory_1..L; Jan..Dec; Az000..Az350; 1..SOIL_NODES)
 *****************************************************************************/
 void RegistryLayerName(int Var, int Layer, int SoilLayers, char *Buffer, size_t Size)
 {
@@ -242,6 +257,7 @@ void RegistryLayerName(int Var, int Layer, int SoilLayers, char *Buffer, size_t 
       snprintf(Buffer, Size, "%s.Deep", Name);
     break;
   case SET_ROOT:
+  case SET_NODE:
     snprintf(Buffer, Size, "%s.%d", Name, Layer + 1);
     break;
   case SET_CANOPY:

@@ -78,8 +78,39 @@
   Initially the code had an if statement that prevented all
   lateral subsurface flow beneath stream channels. This version is considerably
   updated to enable hyporheic exchange and subsurface flow below channels.
+
+  With soil freezing the table depth counts ice as water; each
+  transmissivity (lateral outflow, gaining and losing channel) leaves out
+  the frozen zones of the cell (ThawedFraction()), so saturated thawed soil
+  above or between them flows, and the deep flux continues below them.
  
 *****************************************************************************/
+
+/*****************************************************************************
+  ThawedFraction()
+
+  Share of the exponential lateral conductivity, Ks exp(-KsLatExp z),
+  integrated over Top..Bottom (m) that lies outside the frozen zones of
+  the cell; 1 without soil freezing, frozen zones or thickness
+*****************************************************************************/
+static float ThawedFraction(OPTIONSTRUCT *Options, SOILPIX *Soil, float Top, float Bottom)
+{
+  double f = Soil->KsLatExp, All, Frozen = 0., a, b;
+  int n;
+
+  if (!Options->SoilFreezing || Soil->NFrost == 0 || Bottom <= Top)
+    return 1.0;
+  All = (f > 0.) ? (exp(-f * Top) - exp(-f * Bottom)) / f : Bottom - Top;
+  for (n = 0; n < Soil->NFrost; n++) {
+    a = (Soil->FrostTop[n] > Top) ? Soil->FrostTop[n] : Top;
+    b = (Soil->FrostBottom[n] < Bottom) ? Soil->FrostBottom[n] : Bottom;
+    if (b > a)
+      Frozen += (f > 0.) ? (exp(-f * a) - exp(-f * b)) / f : b - a;
+  }
+  if (All <= 0. || Frozen >= All)
+    return 0.0;
+  return (float) (1. - Frozen / All);
+}
 void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
 		     VEGPIX **VegMap,
 		     NETSTRUCT **Network, SOILTABLE *SType,
@@ -96,6 +127,7 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
   float EffThickness;
   float SoilDeficit;
   float *Adjust;
+  float *Ice;                   /* Layer ice of the cell (NULL without soil freezing) */
   float fract_used;
   float DeltaWaterLevel;
   float Depth;
@@ -207,6 +239,7 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
     BankHeight = (Network[y][x].BankHeight > SoilMap[y][x].Depth) ?
                  SoilMap[y][x].Depth : Network[y][x].BankHeight;
     Adjust = Network[y][x].Adjust;
+    Ice = Options->SoilFreezing ? SoilMap[y][x].Ice : NULL;
     fract_used = 0.0f;
     water_out_stream = 0.0;
     water_in_stream = 0.0;
@@ -234,7 +267,8 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
       Transmissivity = CalcTransmissivity(SoilMap[y][x].Depth, Depth,
                                           SoilMap[y][x].KsLat,
                                           SoilMap[y][x].KsLatExp,
-                                          SType[SoilMap[y][x].Soil - 1].DepthThresh);
+                                          SType[SoilMap[y][x].Soil - 1].DepthThresh) *
+        ThawedFraction(Options, &(SoilMap[y][x]), Depth, SoilMap[y][x].Depth);
       
       OutFlow = (Transmissivity * fract_used * SubFlowGrad[y][x] * Dt) / (Map->DX * Map->DY);
       
@@ -245,7 +279,7 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
       CalcAvailableWater(SType[SoilMap[y][x].Soil - 1].NLayers,
                          SoilMap[y][x].Depth, SoilMap[y][x].LayerThickness,
                          SoilMap[y][x].Porosity, SoilMap[y][x].FCap, SoilMap[y][x].Moist,
-                         SoilMap[y][x].TableDepth, Adjust);
+                         SoilMap[y][x].TableDepth, Adjust, Ice);
     } else {
       OutFlow = 0.0;
       TotalAvailableWater = 0.0;
@@ -266,14 +300,15 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
           CalcTransmissivity(ChannelWaterLevel, AdjTableDepth,
                              SoilMap[y][x].KsLat,
                              SoilMap[y][x].KsLatExp,
-                             SType[SoilMap[y][x].Soil - 1].DepthThresh);
+                             SType[SoilMap[y][x].Soil - 1].DepthThresh) *
+          ThawedFraction(Options, &(SoilMap[y][x]), AdjTableDepth, ChannelWaterLevel);
         
         AvailableWater = 
           CalcAvailableWater(SType[SoilMap[y][x].Soil - 1].NLayers,
                              ChannelWaterLevel, SoilMap[y][x].LayerThickness,
                              SoilMap[y][x].Porosity,
                              SoilMap[y][x].FCap, SoilMap[y][x].Moist,
-                             SoilMap[y][x].TableDepth, Adjust);
+                             SoilMap[y][x].TableDepth, Adjust, Ice);
         /* No more than the cell can give in total */
         if (AvailableWater > TotalAvailableWater)
           AvailableWater = TotalAvailableWater;
@@ -293,7 +328,8 @@ void RouteSubSurface(int Dt, MAPSIZE *Map, TOPOPIX **TopoMap,
           CalcTransmissivity(AdjTableDepth, ChannelWaterLevel,
                              SoilMap[y][x].KsLat,
                              SoilMap[y][x].KsLatExp,
-                             SType[SoilMap[y][x].Soil - 1].DepthThresh);
+                             SType[SoilMap[y][x].Soil - 1].DepthThresh) *
+          ThawedFraction(Options, &(SoilMap[y][x]), ChannelWaterLevel, AdjTableDepth);
 
         /* Find capacity (porosity - moist) of unsaturated soil below channel water level */
         SoilDeficit = 0.0;
@@ -617,7 +653,7 @@ void RouteSubSurfaceSpinup(int Dt, int DeepFluxSteps, MAPSIZE *Map, TOPOPIX **To
       CalcAvailableWater(SType[SoilMap[y][x].Soil - 1].NLayers,
                          SoilMap[y][x].Depth, SoilMap[y][x].LayerThickness,
                          SoilMap[y][x].Porosity, SoilMap[y][x].FCap, SoilMap[y][x].Moist,
-                         SoilMap[y][x].TableDepth, Network[y][x].Adjust);
+                         SoilMap[y][x].TableDepth, Network[y][x].Adjust, NULL);
     } else {
       OutFlow = 0.0;
       TotalAvailableWater = 0.0;
@@ -664,7 +700,7 @@ void RouteSubSurfaceSpinup(int Dt, int DeepFluxSteps, MAPSIZE *Map, TOPOPIX **To
                       SType[SoilMap[y][x].Soil - 1].NLayers, SoilMap[y][x].Depth, SoilMap[y][x].LayerThickness,
                       SoilMap[y][x].Porosity, SoilMap[y][x].FCap,
                       Network[y][x].Adjust, &(SoilMap[y][x].TableDepth),
-                      &(SoilMap[y][x].IExcess), SoilMap[y][x].Moist);
+                      &(SoilMap[y][x].IExcess), SoilMap[y][x].Moist, NULL);
     
     SoilMap[y][x].TableDepth = WaterTableDepth(SType[SoilMap[y][x].Soil - 1].NLayers, SoilMap[y][x].Depth,
                                                SoilMap[y][x].LayerThickness, SoilMap[y][x].Porosity, SoilMap[y][x].FCap,

@@ -183,7 +183,13 @@ static void ApplySoilParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, INPUTMAPS *
           !(Cell->Perc = (float *)calloc(NLayers, sizeof(float))) ||
           !(Cell->InterFlow = (float *)calloc(NLayers + 1, sizeof(float))) ||
           !(Cell->Temp = (float *)calloc(NLayers, sizeof(float))) ||
-          !(Cell->LayerThickness = (float *)calloc(NLayers, sizeof(float))))
+          !(Cell->LayerThickness = (float *)calloc(NLayers, sizeof(float))) ||
+          !(Cell->TNode = (float *)calloc(SOIL_NODES, sizeof(float))) ||
+          !(Cell->IceNode = (float *)calloc(SOIL_NODES, sizeof(float))) ||
+          !(Cell->FrostTop = (float *)calloc(SOIL_FROST_ZONES, sizeof(float))) ||
+          !(Cell->FrostBottom = (float *)calloc(SOIL_FROST_ZONES, sizeof(float))) ||
+          !(Cell->Ice = (float *)calloc(NLayers + 1, sizeof(float))) ||
+          !(Cell->TLayer = (float *)calloc(NLayers + 1, sizeof(float))))
         ReportError((char *)Routine, 1);
       if (Options->Infiltration == DYNAMIC)
         Cell->InfiltAcc = 0.;

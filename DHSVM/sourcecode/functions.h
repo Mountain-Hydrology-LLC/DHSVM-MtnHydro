@@ -234,17 +234,18 @@ float SatVaporPressure(float Temperature);
 
 void StoreChannelState(char *FileName, Channel *Head);
 
-void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, TOPOPIX **TopoMap,
+void StoreModelState(char *Path, DATE *Valid, MAPSIZE *Map, int SoilFreezing,
+                     TOPOPIX **TopoMap,
                      PRECIPPIX **PrecipMap, SNOWPIX **SnowMap, VEGPIX **VegMap,
                      SOILPIX **SoilMap, CHANNEL *ChannelData,
                      LAKETABLE *LType);
 
-void StoreSnapshots(int StepsDone, MAPSIZE *Map, DUMPSTRUCT *Dump,
+void StoreSnapshots(int StepsDone, MAPSIZE *Map, DUMPSTRUCT *Dump, int SoilFreezing,
                     TOPOPIX **TopoMap, PRECIPPIX **PrecipMap, SNOWPIX **SnowMap,
                     VEGPIX **VegMap, SOILPIX **SoilMap,
                     CHANNEL *ChannelData, LAKETABLE *LType);
 
-void ReadModelState(char *Path, DATE *Start, int Dt, MAPSIZE *Map,
+void ReadModelState(char *Path, DATE *Start, int Dt, MAPSIZE *Map, int SoilFreezing,
                     TOPOPIX **TopoMap, PRECIPPIX **PrecipMap, SNOWPIX **SnowMap,
                     VEGPIX **VegMap, SOILPIX **SoilMap,
                     CHANNEL *ChannelData, LAKETABLE *LType);
@@ -266,5 +267,13 @@ void ValidateParameters(OPTIONSTRUCT *Options, MAPSIZE *Map, TOPOPIX **TopoMap,
 void ValidateWeights(MAPSIZE *Map, TOPOPIX **TopoMap, uchar ***MetWeights, int NStats);
 
 float viscosity(float Tair, float Rh);
+
+/* SoilThermalState.c */
+void InitSoilThermal(MAPSIZE *Map, TOPOPIX **TopoMap, SOILPIX **SoilMap,
+                     METLOCATION *Stat, int NStats, uchar ***MetWeights);
+void ColdStartSoilThermal(SOILPIX *Soil, SOILTABLE *SType);
+void SoilThermalDerived(SOILPIX *Soil, int NLayers);
+void UpdateSoilThermalDerived(MAPSIZE *Map, TOPOPIX **TopoMap, SOILPIX **SoilMap,
+                              SOILTABLE *SType);
 
 #endif

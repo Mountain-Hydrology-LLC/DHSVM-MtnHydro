@@ -53,6 +53,7 @@ float SnowPackEnergyBalance(float TSurf, va_list ap)
   float OldTSurf;		    /* Surface temperature during previous time step */
   float *RefreezeEnergy;	/* Refreeze energy (W/m2) */
   float *VaporMassFlux;		/* Mass flux of water vapor to or from the intercepted snow */
+  float GroundFlux;		    /* Heat flux from the ground into the snow (W/m2) */
 
   /* end of list of arguments in variable argument list */
 
@@ -100,6 +101,7 @@ float SnowPackEnergyBalance(float TSurf, va_list ap)
   OldTSurf = (float) va_arg(ap, double);
   RefreezeEnergy = (float *) va_arg(ap, double *);
   VaporMassFlux = (float *) va_arg(ap, double *);
+  GroundFlux = (float) va_arg(ap, double);
 
   /* Calculate active temp for energy balance as average of old and new  */
   TMean = 0.5 * (OldTSurf + TSurf);
@@ -157,6 +159,11 @@ float SnowPackEnergyBalance(float TSurf, va_list ap)
   /* Calculate net energy exchange at the snow surface */
   RestTerm = NetRad + SensibleHeat + LatentHeat + AdvectedEnergy -
     DeltaColdContent;
+
+  /* Heat conducted from the ground (fixed: the flux the ground's solve gave
+     up) */
+  if (GroundFlux != 0.0)
+    RestTerm += GroundFlux;
 
   *RefreezeEnergy = (SurfaceLiquidWater * LF * WATER_DENSITY) / Dt;
 

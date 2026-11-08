@@ -47,6 +47,9 @@ static float CalcSnowPackEnergyBalance(float Tsurf, ...);
     float *TSurf           - Temperature of snow pack surface layer (C)
     float *MeltEnergy      - Energy used for melting and heating of snow pack
                              (W/m2)
+    float SnowMeltAdjustRatio - Factor on the snow melt
+    float GroundFlux       - Heat flux from the ground into the snow surface
+                             layer (W/m2), fixed
 
   Returns      :
     float Outflow          - Amount of snowpack outflow (m)
@@ -67,7 +70,7 @@ float SnowMelt(int y, int x, int Dt, float Z, float Displacement, float Z0,
   float LongRadIn, float Press, float RainFall, float SnowFall, float Tair, 
   float Vpd, float Wind, float *PackWater, float *SurfWater, float *Swq,
   float *VaporMassFlux, float *TPack, float *TSurf, float *MeltEnergy,
-  float SnowMeltAdjustRatio)
+  float SnowMeltAdjustRatio, float GroundFlux)
 {
   /* The pack is split from the float snow water equivalent and rebuilt into
      it every step; the split, the ice and the layer amounts are double so
@@ -145,7 +148,7 @@ float SnowMelt(int y, int x, int Dt, float Z, float Displacement, float Z0,
     Z0, Wind, ShortRad, LongRadIn, AirDens,
     Lv, Tair, Press, Vpd, EactAir, RainFall,
     SurfaceSwq, *SurfWater, OldTSurf,
-    &RefreezeEnergy, VaporMassFlux);
+    &RefreezeEnergy, VaporMassFlux, GroundFlux);
 
   /* If Qnet == 0.0, then set the surface temperature to 0.0 */
   if (fequal(Qnet, 0.0)) {
@@ -221,7 +224,7 @@ float SnowMelt(int y, int x, int Dt, float Z, float Displacement, float Z0,
       *TSurf, SnowPackEnergyBalance, Dt, BaseRa, Z, Displacement,
       Z0, Wind, ShortRad, LongRadIn, AirDens, Lv, Tair,
       Press, Vpd, EactAir, RainFall, SurfaceSwq, *SurfWater,
-      OldTSurf, &RefreezeEnergy, VaporMassFlux);
+      OldTSurf, &RefreezeEnergy, VaporMassFlux, GroundFlux);
 
     /* since we iterated, the surface layer is below freezing and no snowmelt */
     SnowMelt = 0.0;

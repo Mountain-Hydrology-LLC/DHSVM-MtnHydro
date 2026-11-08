@@ -23,12 +23,17 @@
                         due to channel cut.  Multiplied with RootDepth
                         to give the layer thickness for use in calculating
                         soil moisture
+     float *Ice       - Ice of each soil layer (NULL without soil freezing):
+                        a layer holding ice gives only its liquid water
+                        above the field capacity, and none if that is
+                        negative
 
    Returns      : float AvailableWater - Total water available for saturated flow
 
  *****************************************************************************/
 float CalcAvailableWater(int NRootLayers, float TotalDepth, float *RootDepth,
-  float *Porosity, float *FCap, float *Moist, float TableDepth,  float *Adjust)
+  float *Porosity, float *FCap, float *Moist, float TableDepth,  float *Adjust,
+  float *Ice)
 
 {
   float AvailableWater;		/* amount of water available for movement (m) */
@@ -38,6 +43,7 @@ float CalcAvailableWater(int NRootLayers, float TotalDepth, float *RootDepth,
   float DeepLayerDepth;		/* depth of layer below deepest root zone layer */
 
   float DeepPorosity;		/* porosity of the layer below the deepest root layer */
+  float LayerWater;		    /* water of a layer available for movement (m) */
 
   float Depth;			    /* depth below the ground surface (m) */
   int i;			        /* counter */
@@ -59,9 +65,15 @@ float CalcAvailableWater(int NRootLayers, float TotalDepth, float *RootDepth,
       Depth = TotalDepth;
     if (Depth > TableDepth) {
       if ((Depth - TableDepth) > RootDepth[i])
-        AvailableWater += (Porosity[i] - FCap[i]) * RootDepth[i] * Adjust[i];
+        LayerWater = (Porosity[i] - FCap[i]) * RootDepth[i] * Adjust[i];
       else
-        AvailableWater += (Moist[i] - FCap[i]) * RootDepth[i] * Adjust[i];
+        LayerWater = (Moist[i] - FCap[i]) * RootDepth[i] * Adjust[i];
+      if (Ice != NULL && Ice[i] > 0.0) {
+        LayerWater -= Ice[i] * RootDepth[i] * Adjust[i];
+        if (LayerWater < 0.0)
+          LayerWater = 0.0;
+      }
+      AvailableWater += LayerWater;
     }
   }
 
@@ -69,9 +81,15 @@ float CalcAvailableWater(int NRootLayers, float TotalDepth, float *RootDepth,
     Depth = TotalDepth;
 
     if ((Depth - TableDepth) > DeepLayerDepth)
-      AvailableWater += (DeepPorosity - DeepFCap) * DeepLayerDepth * Adjust[NRootLayers];
+      LayerWater = (DeepPorosity - DeepFCap) * DeepLayerDepth * Adjust[NRootLayers];
     else
-      AvailableWater += (Moist[NRootLayers] - DeepFCap) * DeepLayerDepth * Adjust[NRootLayers];
+      LayerWater = (Moist[NRootLayers] - DeepFCap) * DeepLayerDepth * Adjust[NRootLayers];
+    if (Ice != NULL && Ice[NRootLayers] > 0.0) {
+      LayerWater -= Ice[NRootLayers] * DeepLayerDepth * Adjust[NRootLayers];
+      if (LayerWater < 0.0)
+        LayerWater = 0.0;
+    }
+    AvailableWater += LayerWater;
     
   }
   

@@ -125,7 +125,7 @@ int InitSoilTable(OPTIONSTRUCT *Options, SOILTABLE **SType, const char *Path,
   int NLayers = SoilLayers + 1;	/* root zone layers and the deep layer */
   int CName, CDepthThresh, CAnisotropy, CMaxInfilt, CCapillary, CDeepFlux;
   int CAlbedo, CManning, CDepth, CKsLat, CKsLatExp;
-  int *CWP, *CKs, *CPorosity, *CFCap;
+  int *CWP, *CKs, *CPorosity, *CFCap, *CQuartz, *COrganic;
 
   ReadTable(Path, &T);
   TableCheckRows(&T, "Class", 1, TABLE_MAXROWS);
@@ -135,7 +135,9 @@ int InitSoilTable(OPTIONSTRUCT *Options, SOILTABLE **SType, const char *Path,
   CKs = calloc(NLayers, sizeof(int));
   CPorosity = calloc(NLayers, sizeof(int));
   CFCap = calloc(NLayers, sizeof(int));
-  if (!CWP || !CKs || !CPorosity || !CFCap)
+  CQuartz = calloc(NLayers, sizeof(int));
+  COrganic = calloc(NLayers, sizeof(int));
+  if (!CWP || !CKs || !CPorosity || !CFCap || !CQuartz || !COrganic)
     ReportError((char *)Routine, 1);
 
   CName = TableColumn(&T, "Name", "-", TRUE);
@@ -161,6 +163,14 @@ int InitSoilTable(OPTIONSTRUCT *Options, SOILTABLE **SType, const char *Path,
     CManning = TableColumn(&T, "ManningsN", "-", TRUE);
   else
     TableKnown(&T, "ManningsN");
+  if (Options->SoilFreezing) {
+    TableLayerColumns(&T, "Quartz", MAP_SOIL, SoilLayers, "fraction", TRUE, CQuartz);
+    TableLayerColumns(&T, "Organic", MAP_SOIL, SoilLayers, "fraction", TRUE, COrganic);
+  }
+  else {
+    TableKnownLayers(&T, "Quartz", MAP_SOIL, SoilLayers);
+    TableKnownLayers(&T, "Organic", MAP_SOIL, SoilLayers);
+  }
   ClassColumns(&T, Options, CM_DEPTH, SoilLayers, &CDepth);
   ClassColumns(&T, Options, CM_KSLAT, SoilLayers, &CKsLat);
   ClassColumns(&T, Options, CM_EXPDEC, SoilLayers, &CKsLatExp);
@@ -224,12 +234,22 @@ int InitSoilTable(OPTIONSTRUCT *Options, SOILTABLE **SType, const char *Path,
       TableFloats(&T, i, CPorosity, NLayers, (*SType)[i].Porosity);
     if (Options->FromTable[CM_FCAP])
       TableFloats(&T, i, CFCap, NLayers, (*SType)[i].FCap);
+
+    if (Options->SoilFreezing) {
+      if (!((*SType)[i].Quartz = (float *)calloc(NLayers, sizeof(float))) ||
+          !((*SType)[i].Organic = (float *)calloc(NLayers, sizeof(float))))
+        ReportError((char *)Routine, 1);
+      TableFloats(&T, i, CQuartz, NLayers, (*SType)[i].Quartz);
+      TableFloats(&T, i, COrganic, NLayers, (*SType)[i].Organic);
+    }
   }
 
   free(CWP);
   free(CKs);
   free(CPorosity);
   free(CFCap);
+  free(CQuartz);
+  free(COrganic);
   FreeTable(&T);
   return NSoils;
 }

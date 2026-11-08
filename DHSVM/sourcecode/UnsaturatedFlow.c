@@ -52,6 +52,12 @@ in a grid cell due to a channel.  Correction coefficents are
 calculated in AdjustStorage() and CutBankGeometry()
 
 Eli Boardman added unsaturated lateral gravimetric interflow (2026)
+
+With soil freezing the ice of each layer (SoilMap Ice) stays in place: the
+conductivity follows the liquid water, Ks ((Moist - Ice)/Porosity)^Exponent,
+and drainage stops when the liquid water reaches the field capacity. The
+water above the porosity still spills to the layer below. The table depth
+counts the ice as water filling the pores.
 *****************************************************************************/
 void UnsaturatedFlow(OPTIONSTRUCT *Options, int Dt, float DX, float DY, float Infiltration,
   int NSoilLayers,
@@ -77,6 +83,10 @@ void UnsaturatedFlow(OPTIONSTRUCT *Options, int Dt, float DX, float DY, float In
   float LateralFrac; /* Fraction of total percolation that is routed laterally */
   float DownhillCapacity; /* Amount of water that neighbor cell's layer can accept */
   int i, k, nx, ny;			        /* counter */
+  float *Ice;               /* Ice of each layer (m3/m3; NULL without soil freezing) */
+  float Liquid;             /* Liquid water content of a layer (m3/m3) */
+
+  Ice = Options->SoilFreezing ? SoilMap[y][x].Ice : NULL;
 
   DeepLayerDepth = TotalDepth;
   for (i = 0; i < NSoilLayers; i++)
@@ -96,21 +106,27 @@ void UnsaturatedFlow(OPTIONSTRUCT *Options, int Dt, float DX, float DY, float In
   for (i = 0; i < NSoilLayers; i++) {
     
     LayerBottomDepth += RootDepth[i];
-    
-    /* No movement if soil moisture is below field capacity */
-    if (Moist[i] > FCap[i]) {
+    Liquid = (Ice != NULL) ? Moist[i] - Ice[i] : Moist[i];
+
+    /* No movement if soil moisture is below field capacity (with ice, the
+       liquid water, unless the layer holds more than its porosity) */
+    if (Liquid > FCap[i] || (Ice != NULL && Moist[i] > Porosity[i])) {
       Exponent = 2.0 / PoreDist[i] + 3.0;
 
-      if (Moist[i] > Porosity[i]) {
+      if (Liquid > Porosity[i]) {
         /* This can happen because the moisture content can exceed the
         porosity the way the algorithm is implemented */
         Drainage = Ks[i] * cosTheta;
         InterFlow = Ks[i] * KsAnisotropy * sinTheta;
       }
-      else {
-        Multiplier = pow((double)(Moist[i]/Porosity[i]), (double)Exponent);
+      else if (Liquid > FCap[i]) {
+        Multiplier = pow((double)(Liquid/Porosity[i]), (double)Exponent);
         Drainage = Ks[i] * Multiplier * cosTheta;
         InterFlow = Ks[i] * Multiplier * KsAnisotropy * sinTheta;
+      }
+      else {
+        Drainage = 0.0;
+        InterFlow = 0.0;
       }
       
       /* Only permit interflow in soil layers that do NOT contain the water table
@@ -134,10 +150,15 @@ void UnsaturatedFlow(OPTIONSTRUCT *Options, int Dt, float DX, float DY, float In
       MaxSoilWater = RootDepth[i] * Porosity[i] * Adjust[i];
       SoilWater = RootDepth[i] * Moist[i] * Adjust[i];
       FieldCapacity = RootDepth[i] * FCap[i] * Adjust[i];
+      if (Ice != NULL)
+        FieldCapacity += RootDepth[i] * Ice[i] * Adjust[i];
 
-      /* No unsaturated flow if the moisture content drops below field capacity */
+      /* No unsaturated flow if the moisture content drops below field
+         capacity (with ice, the liquid water) */
       if ((SoilWater - Perc[i]) < FieldCapacity)
         Perc[i] = SoilWater - FieldCapacity;
+      if (Ice != NULL && Perc[i] < 0.0)
+        Perc[i] = 0.0;
 
       /* If moisture > porosity add the additional to percolation */
       SoilWater -= Perc[i];

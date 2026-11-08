@@ -353,8 +353,8 @@ void ExecDump(MAPSIZE *Map, DATE *Current, int StepsDone, MODELVIEW *Model, TOTA
 #ifndef SNOW_ONLY
   WriteChannelRows(Current, StepsDone - 1, Model, Dump, TRUE);
 #endif
-  StoreSnapshots(StepsDone, Map, Dump, Model->Topo, PrecipMap, SnowMap, Model->Veg,
-                 Model->Soil, ChannelData, LType);
+  StoreSnapshots(StepsDone, Map, Dump, Model->SoilFreezing, Model->Topo, PrecipMap,
+                 SnowMap, Model->Veg, Model->Soil, ChannelData, LType);
   WriteMapLayers(StepsDone, Model, Dump);
 }
 
@@ -363,7 +363,7 @@ void ExecDump(MAPSIZE *Map, DATE *Current, int StepsDone, MODELVIEW *Model, TOTA
 
   Writes the snapshots ([RUN] State Time n) valid after StepsDone time steps
 *****************************************************************************/
-void StoreSnapshots(int StepsDone, MAPSIZE *Map, DUMPSTRUCT *Dump,
+void StoreSnapshots(int StepsDone, MAPSIZE *Map, DUMPSTRUCT *Dump, int SoilFreezing,
   TOPOPIX **TopoMap, PRECIPPIX **PrecipMap, SNOWPIX **SnowMap, VEGPIX **VegMap,
   SOILPIX **SoilMap, CHANNEL *ChannelData, LAKETABLE *LType)
 {
@@ -371,8 +371,8 @@ void StoreSnapshots(int StepsDone, MAPSIZE *Map, DUMPSTRUCT *Dump,
 
   for (i = 0; i < Dump->NStates; i++) {
     if (Dump->StateStep[i] == StepsDone)
-      StoreModelState(Dump->Path, &(Dump->DState[i]), Map, TopoMap, PrecipMap,
-                      SnowMap, VegMap, SoilMap, ChannelData, LType);
+      StoreModelState(Dump->Path, &(Dump->DState[i]), Map, SoilFreezing, TopoMap,
+                      PrecipMap, SnowMap, VegMap, SoilMap, ChannelData, LType);
   }
 }
 

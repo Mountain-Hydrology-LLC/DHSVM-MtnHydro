@@ -143,6 +143,8 @@ int main(int argc, char **argv) {
 	      &EvapMap, &PrecipMap, &RadiationMap, SoilMap, &Soil, VegMap, TopoMap);
   InitInterpolationWeights(&Map, &Options, TopoMap, &MetWeights, Stat, NStats);
   ValidateWeights(&Map, TopoMap, MetWeights, NStats);
+  if (Options.SoilFreezing)
+    InitSoilThermal(&Map, TopoMap, SoilMap, Stat, NStats, MetWeights);
 
   /* Impervious surface routing, horizon angles of the shading */
   if (Options.Impervious)
@@ -181,6 +183,7 @@ int main(int argc, char **argv) {
   Model.Network = Network;
   Model.Streams = ChannelData.streams;
   Model.Dt = Time.Dt;
+  Model.SoilFreezing = Options.SoilFreezing;
   Model.NumLakes = Map.NumLakes;
   Model.LakeLevel = NULL;
   Model.LakeCells = NULL;
@@ -198,8 +201,8 @@ int main(int argc, char **argv) {
   StartNetworkStorage(&Model, Totals.Basin.NCells, &Totals);
 #endif
   HoldStartValues(&Model, &Totals, &Dump);
-  StoreSnapshots(0, &Map, &Dump, TopoMap, PrecipMap, SnowMap, VegMap,
-                 SoilMap, &ChannelData, LType);
+  StoreSnapshots(0, &Map, &Dump, Options.SoilFreezing, TopoMap, PrecipMap, SnowMap,
+                 VegMap, SoilMap, &ChannelData, LType);
   WriteMapLayers(0, &Model, &Dump);
 
 /******************************************************************************/
@@ -294,6 +297,11 @@ int main(int argc, char **argv) {
       &Dump, VegMap, &Veg, LType, SType, &ChannelData, LocalMet.Tair, LocalMet.Rh);
 
 #endif
+
+    /* Layer ice and temperatures and frost depth from the soil temperature
+       nodes */
+    if (Options.SoilFreezing)
+      UpdateSoilThermalDerived(&Map, TopoMap, SoilMap, SType);
 
     /* Basin and class means (and the root zone moisture >= 0), snow
        statistics, water balance, outputs */

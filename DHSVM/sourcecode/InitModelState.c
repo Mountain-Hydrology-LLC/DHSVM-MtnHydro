@@ -14,6 +14,7 @@
 #include "Calendar.h"
 #include "mapio.h"
 #include "photosynthesis.h"
+#include "snow.h"
 
  /*****************************************************************************
    Function name: InitModelState()
@@ -31,9 +32,16 @@
      water table at the surface and no soil evaporation accumulated since a
      wetting, every channel segment filled to the initial
      channel depth. The groundwater spin-up, if any, follows the cold start.
+     With Soil Freezing, every soil temperature node and the soil surface
+     start at the cell's bottom temperature, with the node ice in
+     equilibrium with it.
      Snapshot: the values as read; with Recompute Derived State, the states
      that follow from other states are then rebuilt from them
      (RecomputeDerivedState()).
+     With Soil Freezing, after either: the layer temperatures, layer ice
+     and frost depth from the node state (UpdateSoilThermalDerived()); at a
+     cold start or with Recompute Derived State the table depth becomes the
+     deeper of the water table and the frost depth.
  *****************************************************************************/
 static void ColdStartCells(MAPSIZE *Map, OPTIONSTRUCT *Options,
                            PRECIPPIX **PrecipMap, SNOWPIX **SnowMap,
@@ -62,8 +70,8 @@ void InitModelState(TIMESTRUCT *Time, MAPSIZE *Map, OPTIONSTRUCT *Options,
     ColdStartCells(Map, Options, PrecipMap, SnowMap, SoilMap, VegMap, TopoMap);
   }
   else {
-    ReadModelState(Path, &(Time->Start), Time->Dt, Map, TopoMap, PrecipMap, SnowMap,
-                   VegMap, SoilMap, ChannelData, LType);
+    ReadModelState(Path, &(Time->Start), Time->Dt, Map, Options->SoilFreezing, TopoMap,
+                   PrecipMap, SnowMap, VegMap, SoilMap, ChannelData, LType);
     if (Options->RecomputeDerived)
       RecomputeDerivedState(Map, TopoMap, SnowMap, SoilMap, SType, Network, ChannelData);
   }
@@ -170,6 +178,20 @@ void InitModelState(TIMESTRUCT *Time, MAPSIZE *Map, OPTIONSTRUCT *Options,
         }
       }
     }
+  }
+
+  /* Soil temperature nodes: cold start, then the layer values and frost
+     depth that follow from them */
+  if (Options->SoilFreezing) {
+    if (Options->ColdStart) {
+      for (y = 0; y < Map->NY; y++) {
+        for (x = 0; x < Map->NX; x++) {
+          if (INBASIN(TopoMap[y][x].Mask))
+            ColdStartSoilThermal(&(SoilMap[y][x]), &(SType[SoilMap[y][x].Soil - 1]));
+        }
+      }
+    }
+    UpdateSoilThermalDerived(Map, TopoMap, SoilMap, SType);
   }
 
   /* Flood detention storage of impervious cells: empty at a cold start */
@@ -289,8 +311,9 @@ static void RecomputeDerivedState(MAPSIZE *Map, TOPOPIX **TopoMap, SNOWPIX **Sno
         continue;
 
       Snow = &(SnowMap[y][x]);
-      if (Snow->Swq > 0.0)
+      if (Snow->Swq > 0.0) {
         Snow->HasSnow = TRUE;
+      }
       else {
         Snow->HasSnow = FALSE;
         Snow->PackWater = 0.0;

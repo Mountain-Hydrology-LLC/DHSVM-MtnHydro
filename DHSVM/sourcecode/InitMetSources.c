@@ -50,7 +50,7 @@ void InitMetSources(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map,
   TABLE T;
   int i, k;
   int CName, CFile, CNorth, CEast, CElev;
-  int CLapse[12], CNormal[12], CSnow;
+  int CLapse[12], CNormal[12], CSnow, CMeanT;
   size_t n;
   const char *Separator;
   float East;
@@ -79,6 +79,11 @@ void InitMetSources(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map,
     CSnow = TableColumn(&T, "SnowNormal", "-", TRUE);
   else
     TableKnown(&T, "SnowNormal");
+  CMeanT = -1;
+  if (Options->SoilFreezing)
+    CMeanT = TableColumn(&T, "MeanAirTemperature", "C", TRUE);
+  else
+    TableKnown(&T, "MeanAirTemperature");
   TableWarnUnknown(&T);
 
   *NStats = T.NRows;
@@ -110,6 +115,8 @@ void InitMetSources(LISTPTR Input, OPTIONSTRUCT *Options, MAPSIZE *Map,
     }
     if (Options->SnowPattern)
       (*Stat)[i].SnowPatternBase = TableFloat(&T, i, CSnow);
+    if (Options->SoilFreezing)
+      (*Stat)[i].MeanAirTemp = TableFloat(&T, i, CMeanT);
 
     MakePath((*Stat)[i].MetFile.FileName, sizeof((*Stat)[i].MetFile.FileName), "%s%s%s",
              Dir, Separator, TableText(&T, i, CFile));

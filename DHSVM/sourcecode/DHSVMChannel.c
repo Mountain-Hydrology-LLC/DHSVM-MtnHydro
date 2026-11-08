@@ -240,6 +240,7 @@ RouteChannel(CHANNEL *ChannelData, TIMESTRUCT *Time, MAPSIZE *Map,
         
         /* Find maximum amount of water that can be added to subsurface */
         /* So that water table immediately below channel just reaches bottom of lowest channel cut */
+        /* With soil freezing a layer holding ice takes at most its free pore space */
         MaxInfiltrationCap = 0.0;
         Depth = 0.0;
         for (i = 0; i < SType[SoilMap[y][x].Soil - 1].NLayers && Depth < ChannelTableDepth; i++) {
@@ -251,7 +252,7 @@ RouteChannel(CHANNEL *ChannelData, TIMESTRUCT *Time, MAPSIZE *Map,
           if (Depth > max_bank_height) {
             EffThickness = ((Depth - max_bank_height) < SoilMap[y][x].LayerThickness[i] ?
                               (Depth - max_bank_height) : SoilMap[y][x].LayerThickness[i]);
-            if (Depth < ChannelTableDepth)
+            if (Depth < ChannelTableDepth || (Options->SoilFreezing && SoilMap[y][x].Ice[i] > 0.0))
               MaxInfiltrationCap += (SoilMap[y][x].Porosity[i] - SoilMap[y][x].Moist[i]) * EffThickness;
             else {
               EffThickness -= (Depth - ChannelTableDepth);
@@ -262,7 +263,10 @@ RouteChannel(CHANNEL *ChannelData, TIMESTRUCT *Time, MAPSIZE *Map,
         /* Also add deep layer water capacity if water table is below root zone layers */
         if (ChannelTableDepth > Depth) {
           i = SType[SoilMap[y][x].Soil - 1].NLayers;
-          MaxInfiltrationCap += (SoilMap[y][x].Porosity[i] - SoilMap[y][x].FCap[i]) * (ChannelTableDepth - Depth);
+          if (Options->SoilFreezing && SoilMap[y][x].Ice[i] > 0.0)
+            MaxInfiltrationCap += (SoilMap[y][x].Porosity[i] - SoilMap[y][x].Moist[i]) * (ChannelTableDepth - Depth);
+          else
+            MaxInfiltrationCap += (SoilMap[y][x].Porosity[i] - SoilMap[y][x].FCap[i]) * (ChannelTableDepth - Depth);
         }
       } else
         MaxInfiltrationCap = 0.0;

@@ -11,6 +11,11 @@
  
  Further modified by Eli Boardman to subtract water from deep infiltration
  (essentially a leaky bottom to the watershed)
+
+ Ice (the layer ice, m3/m3; NULL without soil freezing) takes no part in
+ the outflow: a layer holding ice gives only its liquid water above the
+ field capacity, and none if that is negative. The inflow fills the pore
+ space the ice leaves.
 */
 
 #include <math.h>
@@ -25,7 +30,7 @@
 void DistributeSatflow(int Dt, float DX, float DY, float SatFlow,
   int NSoilLayers, float TotalDepth, float *RootDepth,
   float *Porosity, float *FCap, float *Adjust,
-  float *TableDepth, float *IExcess, float *Moist)
+  float *TableDepth, float *IExcess, float *Moist, float *Ice)
 
 {
   float DeepLayerDepth;		/* depth of the layer below the deepest root layer */
@@ -66,6 +71,11 @@ void DistributeSatflow(int Dt, float DX, float DY, float SatFlow,
           AvaWater = (Porosity[i]-FCap[i]) * RootDepth[i] * Adjust[i];
         else
           AvaWater = (Moist[i]-FCap[i]) * RootDepth[i] * Adjust[i];
+        if (Ice != NULL && Ice[i] > 0.0) {
+          AvaWater -= Ice[i] * RootDepth[i] * Adjust[i];
+          if (AvaWater < 0.0)
+            AvaWater = 0.0;
+        }
       }
       ExtracWater = (-SatFlow > AvaWater) ? -AvaWater : SatFlow;
 
@@ -85,6 +95,11 @@ void DistributeSatflow(int Dt, float DX, float DY, float SatFlow,
           DeepAvaWater = (DeepPorosity - DeepFCap) * DeepLayerDepth * Adjust[NSoilLayers];
         else
           DeepAvaWater = (Moist[NSoilLayers] - DeepFCap) * DeepLayerDepth * Adjust[NSoilLayers];;
+        if (Ice != NULL && Ice[NSoilLayers] > 0.0) {
+          DeepAvaWater -= Ice[NSoilLayers] * DeepLayerDepth * Adjust[NSoilLayers];
+          if (DeepAvaWater < 0.0)
+            DeepAvaWater = 0.0;
+        }
       }
 
       DeepExtracWater = (-SatFlow > DeepAvaWater) ? -DeepAvaWater : SatFlow;

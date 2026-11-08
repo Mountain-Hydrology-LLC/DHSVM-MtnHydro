@@ -27,7 +27,8 @@ SlopeAspect.o SnowInterception.o SnowMelt.o SnowPackEnergyBalance.o \
 StabilityCorrection.o StoreModelState.o      \
 SurfaceEvaporation.o SurfaceRouting.o UnsaturatedFlow.o WaterTableDepth.o  \
 channel.o channel_grid.o equal.o errorhandler.o globals.o Tables.o \
-DistributeSatflow.o SnowStats.o Validate.o VegUpdates.o
+DistributeSatflow.o SnowDensity.o SnowStats.o Validate.o VegUpdates.o \
+SoilProperties.o SoilProfile.o SoilThermalState.o GroundEnergy.o
 
 SRCS = $(OBJS:%.o=%.c)
 
@@ -35,7 +36,7 @@ HDRS = Calendar.h DHSVMChannel.h DHSVMerror.h brent.h channel.h     \
 channel_grid.h constants.h data.h errorhandler.h    \
 fileio.h functions.h getinit.h lookuptable.h massenergy.h \
 mapio.h output.h photosynthesis.h rad.h registry.h settings.h sizeofnt.h slopeaspect.h snow.h \
-soilmoisture.h tables.h
+soilmoisture.h soiltemp.h tables.h
 
 OTHER = makefile
 
@@ -72,7 +73,7 @@ ApplyParameters.o: ApplyParameters.c settings.h data.h Calendar.h \
  channel_grid.h constants.h
 Aggregate.o: Aggregate.c settings.h data.h Calendar.h channel.h \
  DHSVMerror.h functions.h DHSVMChannel.h getinit.h channel_grid.h \
- constants.h output.h registry.h photosynthesis.h
+ constants.h output.h registry.h photosynthesis.h snow.h
 CalcAerodynamic.o: CalcAerodynamic.c DHSVMerror.h settings.h constants.h \
  functions.h data.h Calendar.h channel.h DHSVMChannel.h getinit.h \
  channel_grid.h
@@ -190,7 +191,7 @@ OutputRequests.o: OutputRequests.c settings.h data.h Calendar.h channel.h \
  constants.h output.h registry.h
 OutputValues.o: OutputValues.c settings.h data.h Calendar.h channel.h \
  DHSVMerror.h functions.h DHSVMChannel.h getinit.h channel_grid.h \
- constants.h output.h registry.h photosynthesis.h
+ constants.h output.h registry.h photosynthesis.h snow.h
 MassRelease.o: MassRelease.c constants.h settings.h massenergy.h data.h \
  Calendar.h channel.h DHSVMChannel.h getinit.h channel_grid.h snow.h \
  photosynthesis.h
@@ -266,6 +267,8 @@ Tables.o: Tables.c settings.h DHSVMerror.h fileio.h data.h Calendar.h \
 DistributeSatflow.o: DistributeSatflow.c constants.h settings.h \
  functions.h data.h Calendar.h channel.h DHSVMChannel.h getinit.h \
  channel_grid.h soilmoisture.h
+SnowDensity.o: SnowDensity.c settings.h data.h Calendar.h channel.h \
+ constants.h snow.h
 SnowStats.o: SnowStats.c settings.h data.h Calendar.h channel.h \
  DHSVMerror.h functions.h DHSVMChannel.h getinit.h channel_grid.h \
  constants.h
@@ -307,3 +310,7 @@ depend: .depend
 clean:: 
 	rm -f .depend
 
+SoilProperties.o: SoilProperties.c settings.h constants.h soiltemp.h
+SoilProfile.o: SoilProfile.c settings.h constants.h soiltemp.h
+SoilThermalState.o: SoilThermalState.c settings.h data.h DHSVMerror.h functions.h constants.h soiltemp.h
+GroundEnergy.o: GroundEnergy.c settings.h data.h DHSVMerror.h functions.h massenergy.h constants.h soiltemp.h
