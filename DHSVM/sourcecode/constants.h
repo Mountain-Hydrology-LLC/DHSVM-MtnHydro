@@ -28,6 +28,7 @@
 #define SOIL_K_WATER 0.57		/* Thermal conductivity of water in soil (W/(m C)) */
 #define SOIL_KDRY_ORG 0.05		/* Dry thermal conductivity of organic solids (W/(m C)) */
 #define SOIL_KS_ORG 0.25		/* Thermal conductivity of organic solids (W/(m C)) */
+#define SOIL_K_LITTER 0.1		/* Thermal conductivity of surface litter (W/(m C)) */
 #define SOIL_CS_MIN 2.0e6		/* Volumetric heat capacity of mineral solids (J/(m3 C)) */
 #define SOIL_CS_ORG 2.7e6		/* Volumetric heat capacity of organic solids (J/(m3 C)) */
 #define SOIL_CS_WATER 4.2e6		/* Volumetric heat capacity of water in soil (J/(m3 C)) */

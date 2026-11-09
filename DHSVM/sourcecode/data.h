@@ -684,6 +684,7 @@ typedef struct {
   STORYTABLE Story;		/* Stomatal, root, albedo and LAI parameters */
   float RadAtten;		/* Shortwave attenuation coefficient of the understory per unit LAI */
   float LitterCover;		/* Fraction of the cell under litter, where the soil does not evaporate */
+  float LitterThickness;	/* Thickness of the litter over LitterCover of the cell (m) */
   float ImpervFrac;		/* fraction of pixel that is impervious */
   float DetentionFrac;		/* fraction of flow on impervious area goes to flood detention storage */
   float DetentionDecay;		/* Decay coefficient of linear reservoir storage for impervious surface detention facility */

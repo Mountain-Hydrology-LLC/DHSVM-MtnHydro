@@ -57,7 +57,7 @@ void NoSensibleHeatFlux(int Dt, PIXMET *LocalMet, float ETot, SOILPIX *LocalSoil
 float GroundEnergyBalance(int y, int x, int Dt, PIXMET *LocalMet, SOILTABLE *SType,
                           SOILPIX *Soil, int Snow, float SnowTemp, float SnowCond,
                           float NetRadGround, float LongOutGround, float LowerRa,
-                          float LowerWind, float GroundEvap);
+                          float LowerWind, float GroundEvap, float LitterFrac, float LitterThick);
 
 void RadiationBalance(OPTIONSTRUCT *Options,
               int Overstory, float FuR, float Cu,

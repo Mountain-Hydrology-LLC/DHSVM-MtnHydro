@@ -43,6 +43,7 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
   float Wet;            /* Water the wet leaves can evaporate during the step:
                         the storage plus the step's rain its full storage
                         passed on (m) */
+  float MaxRefill;      /* Most rain the storage can take back in the step (m) */
   float Refill;         /* Rain taken back from the throughfall to refill the
                         storage as it evaporates (m) */
   int i;			    /* counter */
@@ -96,14 +97,20 @@ void EvapoTranspiration(int Layer, int Dt, PIXMET *Met,
 
   /* The step's rain falls throughout the step: what the full storage passed
   on (Overflow, at most the throughfall left) refills the storage as it
-  evaporates, so the wet leaves can evaporate the storage plus that rain, and
-  the storage ends at most full. The rain taken back leaves the throughfall.
+  evaporates, at most one storage per hour of the step including the storage
+  itself, so the wet leaves can evaporate the storage plus that rain, and the
+  storage ends at most full. The rain taken back leaves the throughfall.
   Without overflow this is the storage alone. */
   if (Overflow > *Throughfall)
     Overflow = *Throughfall;
   if (Overflow < 0.0)
     Overflow = 0.0;
   Overflow /= F;
+  MaxRefill = MaxInt * ((float) Dt / SECPHOUR - 1.0);
+  if (MaxRefill < 0.0)
+    MaxRefill = 0.0;
+  if (Overflow > MaxRefill)
+    Overflow = MaxRefill;
   Wet = *Int + Overflow;
 
   WetEvapRate = WetArea * EPot[Layer];

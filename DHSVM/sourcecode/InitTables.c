@@ -448,7 +448,7 @@ static int InitUnderstoryTable(UNDERTABLE **UType, const char *Path, OPTIONSTRUC
   TABLE T;
   int i;
   int NRows;
-  int CName, CAtten, CLitter, CImperv, CDetFrac, CDetDecay;
+  int CName, CAtten, CLitter, CLitterThick, CImperv, CDetFrac, CDetDecay;
   STORYCOLUMNS CStory;
   UNDERTABLE *Under;
 
@@ -460,6 +460,7 @@ static int InitUnderstoryTable(UNDERTABLE **UType, const char *Path, OPTIONSTRUC
   StoryColumns(&T, Options, CM_UNDERCOVER, SoilLayers, &CStory);
   CAtten = TableColumn(&T, "RadiationAttenuation", "-", TRUE);
   CLitter = TableColumn(&T, "LitterCover", "fraction", TRUE);
+  CLitterThick = TableColumn(&T, "LitterThickness", "m", TRUE);
   CImperv = TableColumn(&T, "ImperviousFraction", "fraction", TRUE);
 
   /* Some class with an impervious fraction */
@@ -489,6 +490,7 @@ static int InitUnderstoryTable(UNDERTABLE **UType, const char *Path, OPTIONSTRUC
 
     Under->RadAtten = TableFloat(&T, i, CAtten);
     Under->LitterCover = TableFloat(&T, i, CLitter);
+    Under->LitterThickness = TableFloat(&T, i, CLitterThick);
     Under->ImpervFrac = TableFloat(&T, i, CImperv);
     if (Under->ImpervFrac > 0) {
       Under->DetentionFrac = TableFloat(&T, i, CDetFrac);

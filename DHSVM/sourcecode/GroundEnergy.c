@@ -38,12 +38,12 @@
 float GroundEnergyBalance(int y, int x, int Dt, PIXMET *LocalMet, SOILTABLE *SType,
                           SOILPIX *Soil, int Snow, float SnowTemp, float SnowCond,
                           float NetRadGround, float LongOutGround, float LowerRa,
-                          float LowerWind, float GroundEvap)
+                          float LowerWind, float GroundEvap, float LitterFrac, float LitterThick)
 {
   SOILNODES Nodes;
   double T0 = Soil->TNode[0], Tk = T0 + 273.15;
   double Rn = 0., H = 0., LatentHeat = 0., Ra = DHSVM_HUGE;
-  double DRn = 0., DH = 0., H0, Beta, Into, Storage, Rest, Change;
+  double DRn = 0., DH = 0., H0, Beta, Into, Storage, Rest, Change, Conduct, Scale;
 
   /* Node water from the layers now; the node ice at most the node water */
   NodeMoisture(SType->NLayers, Soil->LayerThickness, Soil->Depth, Soil->Moist,
@@ -67,6 +67,15 @@ float GroundEnergyBalance(int y, int x, int Dt, PIXMET *LocalMet, SOILTABLE *STy
     LatentHeat = -LocalMet->Lv * WATER_DENSITY * GroundEvap / Dt;
     H0 = Rn + H + LatentHeat;
     Beta = DRn + DH;
+  }
+
+  /* Litter over LitterFrac of the ground, in series with the surface exchange:
+     the fluxes of the covered and the bare fraction as area weights */
+  if (LitterFrac > 0. && LitterThick > 0.) {
+    Conduct = SOIL_K_LITTER / LitterThick;
+    Scale = 1. - LitterFrac + LitterFrac * Conduct / (Conduct - Beta);
+    H0 *= Scale;
+    Beta *= Scale;
   }
 
   Into = SolveProfile(Soil->TNode, Soil->IceNode, Soil->TBot, &Nodes, (double) Dt,

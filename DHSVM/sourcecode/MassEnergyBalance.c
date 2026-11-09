@@ -272,7 +272,9 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
           SnowCond = SnowMax / (LocalSoil->TSurf - SnowTemp);
       }
       QSnowGround = GroundEnergyBalance(y, x, Dt, LocalMet, SType, LocalSoil, TRUE,
-                                        SnowTemp, SnowCond, 0.f, 0.f, 0.f, 0.f, 0.f);
+                                        SnowTemp, SnowCond, 0.f, 0.f, 0.f, 0.f, 0.f,
+                                        (Under != NULL) ? Under->LitterCover : 0.f,
+                                        (Under != NULL) ? Under->LitterThickness : 0.f);
     }
 #endif
     LocalSnow->Outflow =
@@ -566,7 +568,8 @@ void MassEnergyBalance(OPTIONSTRUCT *Options, int y, int x,
     GroundEnergyBalance(y, x, Dt, LocalMet, SType, LocalSoil, FALSE, 0.f, 0.f,
                         NetRadGround, LocalRad->LongOutGround, LowerRa,
                         (LocalVeg->OverStory == TRUE) ? LocalVeg->U[1] * LocalMet->Wind : UpperWind,
-                        LocalEvap->EvapSoil);
+                        LocalEvap->EvapSoil, (Under != NULL) ? Under->LitterCover : 0.f,
+                        (Under != NULL) ? Under->LitterThickness : 0.f);
 #endif
 
   /* add the water that was not intercepted to the upper soil layer */
